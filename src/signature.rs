@@ -7,7 +7,7 @@ use edamame_foundation::foundation::FOUNDATION_VERSION;
 type HmacSha256 = Hmac<Sha256>;
 
 // Verify version and signature of the request and return an error message if the request is invalid
-pub fn verify_header(request: Request) -> String {
+pub fn verify_header(secret: &str, request: Request) -> String {
     // Get the headers
     let headers = request.headers();
 
@@ -42,7 +42,7 @@ pub fn verify_header(request: Request) -> String {
     }
 
     // Verify the signature
-    if !verify_signature(timestamp.parse().unwrap_or(0), request_id, received_signature) {
+    if !verify_signature(secret, timestamp.parse().unwrap_or(0), request_id, received_signature) {
         println!("bad signature");
         return "bad signature".to_string();
     }
@@ -51,9 +51,7 @@ pub fn verify_header(request: Request) -> String {
     "".to_string()
 }
 
-fn verify_signature(timestamp: u64, request_id: &str, received_signature: &str) -> bool {
-
-    let secret = env!("LAMBDA_SIGNATURE");
+fn verify_signature(secret: &str, timestamp: u64, request_id: &str, received_signature: &str) -> bool {
 
     // Ensure the timestamp is within an acceptable range (e.g., 5 minutes)
     let current_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
