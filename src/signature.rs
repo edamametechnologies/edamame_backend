@@ -13,36 +13,56 @@ pub fn verify_header(secret: &str, request: Request) -> String {
 
     // Get the version
     let version = match headers.get("x-edamame-version") {
-        Some(version) => version.to_str().unwrap_or(""),
-        None => "",
+        Some(version) => {
+            version.to_str().unwrap_or("")
+        },
+        None => {
+            println!("missing x-edamame-version");
+            ""
+        },
     };
 
     // Get the timestamp
     let timestamp = match headers.get("x-edamame-timestamp") {
-        Some(timestamp) => timestamp.to_str().unwrap_or(""),
-        None => "",
+        Some(timestamp) => {
+            timestamp.to_str().unwrap_or("")
+        },
+        None => {
+            println!("missing x-edamame-timestamp");
+            ""
+        },
     };
 
     // Get the request id
     let request_id = match headers.get("x-edamame-request-id") {
-        Some(request_id) => request_id.to_str().unwrap_or(""),
-        None => "",
+        Some(request_id) => {
+            request_id.to_str().unwrap_or("")
+        },
+        None => {
+            println!("missing x-edamame-request-id");
+            ""
+        },
     };
 
     // Get the signature
     let received_signature = match headers.get("x-edamame-signature") {
-        Some(received_signature) => received_signature.to_str().unwrap_or(""),
-        None => "",
+        Some(received_signature) => {
+            received_signature.to_str().unwrap_or("")
+        },
+        None => {
+            println!("missing x-edamame-signature");
+            ""
+        },
     };
 
     // Verify the version
     if version != FOUNDATION_VERSION {
         println!("bad version: {} != {}", version, FOUNDATION_VERSION);
-        return "bad version".to_string();
+        return format!("bad version {} != {}", version, FOUNDATION_VERSION).to_string();
     }
 
     // Verify the signature
-    if !verify_signature(secret, timestamp.parse().unwrap_or(0), request_id, received_signature) {
+    if received_signature.is_empty() || !verify_signature(secret, timestamp.parse().unwrap_or(0), request_id, received_signature) {
         println!("bad signature");
         return "bad signature".to_string();
     }
