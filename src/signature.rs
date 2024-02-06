@@ -54,6 +54,12 @@ pub fn verify_header(secret: &str, request: Request) -> String {
         },
     };
 
+    // Tolerate missing headers to support transition from legacy clients
+    if version.is_empty() && timestamp.is_empty() && request_id.is_empty() && received_signature.is_empty() {
+        println!("all headers, missing - likely a legacy client");
+        return "".to_string();
+    }
+
     // Verify the version
     if version != FOUNDATION_VERSION {
         println!("bad version: {} != {}", version, FOUNDATION_VERSION);
