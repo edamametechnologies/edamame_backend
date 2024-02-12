@@ -100,10 +100,10 @@ pub fn generate_signature(secret: &str, request_id: &str) -> (String, String) {
 
 pub fn verify_signature(secret: &str, timestamp: u64, request_id: &str, received_signature: &str) -> bool {
 
-    // Ensure the timestamp is within an acceptable range (e.g., 5 minutes)
+    // Ensure the timestamp is within an acceptable range (e.g., +/- 5 minutes)
     let current_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
-    if current_time > timestamp + 300 || current_time < timestamp {
-        println!("bad timestamp: {} > {} + 300 || {} < {}", current_time, timestamp, current_time, timestamp);
+    if (current_time as i64 - timestamp as i64).abs() > 300 {
+        println!("bad timestamp: {} != {}", timestamp, current_time);
         return false;
     }
 
