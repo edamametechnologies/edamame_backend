@@ -1,5 +1,4 @@
 fn main() {
-
     // Dotenv build with a specific env path
     let config = dotenv_build::Config {
         filename: std::path::Path::new("../secrets/lambda-signature.env"),
