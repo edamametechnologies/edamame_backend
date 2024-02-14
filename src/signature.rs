@@ -9,7 +9,7 @@ use edamame_foundation::foundation::FOUNDATION_VERSION;
 
 type HmacSha256 = Hmac<Sha256>;
 
-pub fn verify_header(secret: &str, request: Request) -> Result<()> {
+pub fn verify_header(secret: &str, request: &Request) -> Result<()> {
     // Get the headers
     let headers = request.headers();
 
