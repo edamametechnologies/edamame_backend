@@ -5,7 +5,10 @@ edition = "2021"
 
 [dependencies]
 
-edamame_foundation = { features = [ "disable-helper" ], git = "https://github.com/edamametechnologies/edamame_foundation", branch = "dev" }
+edamame_foundation = { features = [ "disable-helper" ], path = "../edamame_foundation" }
+
+# Error
+anyhow = "1.0.79"
 
 # AWS
 lambda_http = "0.9.2"
