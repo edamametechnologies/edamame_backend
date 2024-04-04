@@ -54,7 +54,10 @@ pub fn verify_header(secret: &str, request: &Request) -> Result<()> {
 
     // Verify the version
     if version != FOUNDATION_VERSION {
-        let error = format!("bad version: received version {} != lambda version {}", version, FOUNDATION_VERSION);
+        let error = format!(
+            "bad version: received version {} != lambda version {}",
+            version, FOUNDATION_VERSION
+        );
         println!("{}", &error);
         return Err(anyhow!(error));
     }
