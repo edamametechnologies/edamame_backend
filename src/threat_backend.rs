@@ -53,7 +53,7 @@ pub struct ThreatMetricsJSONBackend {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, PartialOrd)]
-pub enum ThreatStatus {
+pub enum ThreatStatusBackend {
     Active,
     Inactive,
     Unknown,
@@ -64,7 +64,7 @@ pub struct ThreatMetricBackend {
     pub metric: ThreatMetricJSONBackend,
     // Can be empty
     pub timestamp: String,
-    pub status: ThreatStatus,
+    pub status: ThreatStatusBackend,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, PartialOrd)]
