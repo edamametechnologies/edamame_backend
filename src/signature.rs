@@ -49,10 +49,14 @@ pub fn verify_header(secret: &str, request: &Request) -> Result<()> {
             return Err(anyhow!(error));
         }
     };
-    
+
     // Verify the version
     if version != env!("CARGO_PKG_VERSION") {
-        let error = format!("bad version: received version {} != lambda version {}", version, env!("CARGO_PKG_VERSION"));
+        let error = format!(
+            "bad version: received version {} != lambda version {}",
+            version,
+            env!("CARGO_PKG_VERSION")
+        );
         println!("{}", &error);
         return Err(anyhow!(error));
     }
@@ -139,8 +143,6 @@ pub fn verify_signature(
         }
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
