@@ -1,11 +1,9 @@
 [package]
 name = "edamame_backend"
-version = "0.1.0"
+version = "0.3.3"
 edition = "2021"
 
 [dependencies]
-
-edamame_foundation = { features = [ "disable-helper" ], path = "../edamame_foundation" }
 
 # Error
 anyhow = "1.0.79"
