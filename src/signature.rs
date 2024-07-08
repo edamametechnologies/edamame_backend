@@ -4,8 +4,6 @@ use lambda_http::Request;
 use sha2::Sha256;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use edamame_foundation::foundation::FOUNDATION_VERSION;
-
 type HmacSha256 = Hmac<Sha256>;
 
 pub fn verify_header(secret: &str, request: &Request) -> Result<()> {
@@ -51,13 +49,10 @@ pub fn verify_header(secret: &str, request: &Request) -> Result<()> {
             return Err(anyhow!(error));
         }
     };
-
+    
     // Verify the version
-    if version != FOUNDATION_VERSION {
-        let error = format!(
-            "bad version: received version {} != lambda version {}",
-            version, FOUNDATION_VERSION
-        );
+    if version != env!("CARGO_PKG_VERSION") {
+        let error = format!("bad version: received version {} != lambda version {}", version, env!("CARGO_PKG_VERSION"));
         println!("{}", &error);
         return Err(anyhow!(error));
     }
@@ -144,6 +139,8 @@ pub fn verify_signature(
         }
     }
 }
+
+
 
 #[cfg(test)]
 mod tests {
