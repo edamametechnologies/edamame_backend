@@ -4,6 +4,8 @@
 #   - check if the code compiles
 #   - run unit tests
 
+name: Rust CI
+
 on:
   push:
     branches:
