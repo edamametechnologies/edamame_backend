@@ -1,51 +1,46 @@
 use anyhow::{anyhow, Result};
 use hmac::{Hmac, Mac};
-use lambda_http::Request;
 use sha2::Sha256;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    collections::HashMap,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 type HmacSha256 = Hmac<Sha256>;
 
-pub fn verify_header(secret: &str, request: &Request) -> Result<()> {
-    // Get the headers
-    let headers = request.headers();
-
+pub fn verify_header(secret: &str, headers: HashMap<String, String>) -> Result<()> {
     // Get the version
     let version = match headers.get("x-edamame-version") {
-        Some(version) => version.to_str().unwrap_or(""),
+        Some(version) => version,
         None => {
             let error = "missing x-edamame-version".to_string();
-            println!("{}", &error);
             return Err(anyhow!(error));
         }
     };
 
     // Get the timestamp
     let timestamp = match headers.get("x-edamame-timestamp") {
-        Some(timestamp) => timestamp.to_str().unwrap_or(""),
+        Some(timestamp) => timestamp,
         None => {
             let error = "missing x-edamame-timestamp".to_string();
-            println!("{}", &error);
             return Err(anyhow!(error));
         }
     };
 
     // Get the request id
     let request_id = match headers.get("x-edamame-request-id") {
-        Some(request_id) => request_id.to_str().unwrap_or(""),
+        Some(request_id) => request_id,
         None => {
             let error = "missing x-edamame-request-id".to_string();
-            println!("{}", &error);
             return Err(anyhow!(error));
         }
     };
 
     // Get the signature
     let received_signature = match headers.get("x-edamame-signature") {
-        Some(received_signature) => received_signature.to_str().unwrap_or(""),
+        Some(received_signature) => received_signature,
         None => {
             let error = "missing x-edamame-signature".to_string();
-            println!("{}", &error);
             return Err(anyhow!(error));
         }
     };
@@ -57,14 +52,12 @@ pub fn verify_header(secret: &str, request: &Request) -> Result<()> {
             version,
             env!("CARGO_PKG_VERSION")
         );
-        println!("{}", &error);
         return Err(anyhow!(error));
     }
 
     // Verify the signature
     if received_signature.is_empty() {
         let error = "missing signature".to_string();
-        println!("{}", &error);
         return Err(anyhow!(error));
     }
     verify_signature(
@@ -113,7 +106,6 @@ pub fn verify_signature(
         .as_secs();
     if (current_time as i64 - timestamp as i64).abs() > 300 {
         let error = format!("bad timestamp: {} != {}", timestamp, current_time);
-        println!("{}", &error);
         return Err(anyhow!(error));
     }
 
@@ -131,14 +123,12 @@ pub fn verify_signature(
             let ok = mac.verify_slice(&decoded_signature).is_ok();
             if !ok {
                 let error = format!("slice verification failed for {:?}", received_signature);
-                println!("{}", &error);
                 return Err(anyhow!(error));
             };
             Ok(())
         }
         Err(_) => {
             let error = format!("failed to decode signature: {:?}", received_signature);
-            println!("{}", &error);
             Err(anyhow!(error))
         }
     }
