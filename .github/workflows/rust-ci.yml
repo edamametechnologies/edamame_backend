@@ -2,7 +2,7 @@
 #   - check if the code is correctly formatted
 #   - check if there are no unhandled clippy warnings
 #   - check if the code compiles
-#   - run unit tests
+#   - run tests
 
 name: Rust CI
 
@@ -44,13 +44,11 @@ jobs:
         # --locked option to make build fail if Cargo.toml was updated but not Cargo.lock
       - run: cargo build --locked
 
-  unit-tests:
-    name: Unit tests
+  tests:
+    name: Tests
     needs: [build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         # all unit tests in lib crates
-      - run: cargo test --lib '*'
-        # all unit tests in bin crates
-      - run: cargo test --bin '*'
+      - run: cargo test
