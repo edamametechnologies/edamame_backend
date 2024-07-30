@@ -9,3 +9,4 @@ pub mod pwned_breach_backend;
 pub mod score_backend;
 pub mod signature;
 pub mod threat_backend;
+pub mod version;
