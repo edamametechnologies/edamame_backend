@@ -1,3 +1,4 @@
+use crate::helper_state_backend::HelperStateBackend;
 use crate::history_backend::OrderHistoryBackend;
 use crate::threat_backend::ThreatMetricsBackend;
 use serde::{Deserialize, Serialize};
@@ -44,7 +45,7 @@ pub struct DetailedScoreBackend {
     pub timezone: String,
     pub latitude: String,
     pub longitude: String,
-    pub helper_state: String,
+    pub helper_state: HelperStateBackend,
     pub score: ScoreBackend,
     // RFC3339
     pub timestamp: String,
