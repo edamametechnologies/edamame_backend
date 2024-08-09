@@ -1,10 +1,8 @@
 use anyhow::{anyhow, Result};
+use chrono::Utc;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
-use std::{
-    collections::HashMap,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::collections::HashMap;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -70,10 +68,7 @@ pub fn verify_header(secret: &str, headers: HashMap<String, String>) -> Result<(
 
 pub fn generate_signature(secret: &str, request_id: &str) -> (String, String) {
     // Get the current timestamp as seconds since the UNIX epoch
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
+    let timestamp = Utc::now().timestamp() as u64;
 
     // Prepare data to sign: concatenate timestamp and request_id
     let data = format!("{}{}", timestamp, request_id);
@@ -100,10 +95,7 @@ pub fn verify_signature(
     received_signature: &str,
 ) -> Result<()> {
     // Ensure the timestamp is within an acceptable range (e.g., +/- 5 minutes)
-    let current_time = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
+    let current_time = Utc::now().timestamp() as u64;
     if (current_time as i64 - timestamp as i64).abs() > 300 {
         let error = format!("bad timestamp: {} != {}", timestamp, current_time);
         return Err(anyhow!(error));
