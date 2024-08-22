@@ -1,3 +1,4 @@
+pub mod feedback_info_backend;
 pub mod history_backend;
 pub mod lanscan_device_info_backend;
 pub mod lanscan_dislike_device_info_backend;
