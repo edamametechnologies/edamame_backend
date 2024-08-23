@@ -94,11 +94,32 @@ pub fn verify_signature(
     request_id: &str,
     received_signature: &str,
 ) -> Result<()> {
+    verify_signature_cmd(secret, timestamp, request_id, received_signature, false)
+}
+
+pub fn verify_signature_no_timestamp_check(
+    secret: &str,
+    timestamp: u64,
+    request_id: &str,
+    received_signature: &str,
+) -> Result<()> {
+    verify_signature_cmd(secret, timestamp, request_id, received_signature, true)
+}
+
+fn verify_signature_cmd(
+    secret: &str,
+    timestamp: u64,
+    request_id: &str,
+    received_signature: &str,
+    no_timestamp_check: bool,
+) -> Result<()> {
     // Ensure the timestamp is within an acceptable range (e.g., +/- 5 minutes)
-    let current_time = Utc::now().timestamp() as u64;
-    if (current_time as i64 - timestamp as i64).abs() > 300 {
-        let error = format!("bad timestamp: {} != {}", timestamp, current_time);
-        return Err(anyhow!(error));
+    if !no_timestamp_check {
+        let current_time = Utc::now().timestamp() as u64;
+        if (current_time as i64 - timestamp as i64).abs() > 300 {
+            let error = format!("bad timestamp: {} != {}", timestamp, current_time);
+            return Err(anyhow!(error));
+        }
     }
 
     // Recreate the data to sign
