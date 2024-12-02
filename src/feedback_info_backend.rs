@@ -13,4 +13,6 @@ pub struct FeedbackInfoBackend {
     pub context: String,
     pub note: String,
     pub email: String,
+    pub app_log: String,
+    pub helper_log: String,
 }
