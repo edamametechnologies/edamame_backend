@@ -39,6 +39,7 @@ pub struct DetailedScoreBackend {
     pub ip6: String,
     pub mac: String,
     pub core_version: String,
+    pub is_cicd: bool,
     pub city: String,
     pub region: String,
     pub country: String,
