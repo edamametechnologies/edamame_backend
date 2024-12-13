@@ -3,8 +3,29 @@ use chrono::Utc;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use std::collections::HashMap;
+use std::env;
+
+const EDAMAME_MINIMUM_BACKEND_VERSION: &str = "0.3.3";
 
 type HmacSha256 = Hmac<Sha256>;
+
+fn verify_version(version: &str) -> bool {
+    let version_parts: Vec<&str> = version.split('.').collect();
+    let edamame_backend_version = env::var("CARGO_PKG_VERSION").unwrap_or("0.0.0".to_string());
+    let edamame_backend_version_parts: Vec<&str> = edamame_backend_version.split('.').collect();
+    let edamame_minimum_backend_version_parts: Vec<&str> =
+        EDAMAME_MINIMUM_BACKEND_VERSION.split('.').collect();
+
+    edamame_backend_version_parts.len() == 3 && edamame_minimum_backend_version_parts.len() == 3
+        // Same major
+        && version_parts[0] == edamame_minimum_backend_version_parts[0]
+        // Compatible minor 
+        && version_parts[1] >= edamame_minimum_backend_version_parts[1]
+        && version_parts[1] <= edamame_backend_version_parts[1]
+        // Compatible patch
+        && version_parts[2] >= edamame_minimum_backend_version_parts[2]
+        && version_parts[2] <= edamame_backend_version_parts[2]
+}
 
 pub fn verify_header(secret: &str, headers: HashMap<String, String>) -> Result<()> {
     // Get the version
@@ -43,15 +64,15 @@ pub fn verify_header(secret: &str, headers: HashMap<String, String>) -> Result<(
         }
     };
 
-    // Verify the version
-    if version != env!("CARGO_PKG_VERSION") {
+    // Check compatibility of the version
+    if !verify_version(version) {
         let error = format!(
-            "bad version: received version {} != lambda version {}",
+            "bad version: received version {} is not compatible with backend version {}",
             version,
             env!("CARGO_PKG_VERSION")
         );
         return Err(anyhow!(error));
-    }
+    };
 
     // Verify the signature
     if received_signature.is_empty() {
@@ -164,5 +185,23 @@ mod tests {
             &gen_signature
         )
         .is_ok());
+    }
+
+    #[test]
+    fn test_version_verification() {
+        let version = "0.3.3";
+        assert!(verify_version(version));
+
+        let version = "0.3.4";
+        assert!(verify_version(version));
+
+        let version = "0.3.2";
+        assert!(!verify_version(version));
+
+        let version = "0.2.3";
+        assert!(!verify_version(version));
+
+        let version = "0.4.3";
+        assert!(!verify_version(version));
     }
 }
