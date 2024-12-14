@@ -5,26 +5,45 @@ use sha2::Sha256;
 use std::collections::HashMap;
 use std::env;
 
-const EDAMAME_MINIMUM_BACKEND_VERSION: &str = "0.3.3";
-
 type HmacSha256 = Hmac<Sha256>;
 
-fn verify_version(version: &str) -> bool {
-    let version_parts: Vec<&str> = version.split('.').collect();
-    let edamame_backend_version = env::var("CARGO_PKG_VERSION").unwrap_or("0.0.0".to_string());
-    let edamame_backend_version_parts: Vec<&str> = edamame_backend_version.split('.').collect();
-    let edamame_minimum_backend_version_parts: Vec<&str> =
-        EDAMAME_MINIMUM_BACKEND_VERSION.split('.').collect();
+// Minimum version supported for the 0 major version
+const EDAMAME_MINIMUM_MINOR: u64 = 3;
+const EDAMAME_MINIMUM_PATCH: u64 = 3;
 
-    edamame_backend_version_parts.len() == 3 && edamame_minimum_backend_version_parts.len() == 3
-        // Same major
-        && version_parts[0] == edamame_minimum_backend_version_parts[0]
+fn verify_version(version: &str) -> bool {
+    let parse_parts = |v: &str| -> Option<(u64, u64, u64)> {
+        let parts: Vec<&str> = v.split('.').collect();
+        if parts.len() == 3 {
+            if let (Ok(major), Ok(minor), Ok(patch)) = (
+                parts[0].parse::<u64>(),
+                parts[1].parse::<u64>(),
+                parts[2].parse::<u64>(),
+            ) {
+                return Some((major, minor, patch));
+            }
+        }
+        None
+    };
+
+    let (version_major, version_minor, version_patch) = match parse_parts(version) {
+        Some(v) => v,
+        None => return false,
+    };
+    let (backend_major, backend_minor, backend_patch) = match parse_parts(env!("CARGO_PKG_VERSION"))
+    {
+        Some(v) => v,
+        None => return false,
+    };
+
+    // Same major
+    version_major == backend_major
         // Compatible minor 
-        && version_parts[1] >= edamame_minimum_backend_version_parts[1]
-        && version_parts[1] <= edamame_backend_version_parts[1]
+        && version_minor >= EDAMAME_MINIMUM_MINOR
+        && version_minor <= backend_minor
         // Compatible patch
-        && version_parts[2] >= edamame_minimum_backend_version_parts[2]
-        && version_parts[2] <= edamame_backend_version_parts[2]
+        && version_patch >= EDAMAME_MINIMUM_PATCH
+        && version_patch <= backend_patch
 }
 
 pub fn verify_header(secret: &str, headers: HashMap<String, String>) -> Result<()> {
@@ -255,13 +274,22 @@ mod tests {
         let version = "0.3.4";
         assert!(verify_version(version));
 
+        let version = "0.3.5";
+        assert!(!verify_version(version));
+
+        let version = "0.3.10";
+        assert!(!verify_version(version));
+
         let version = "0.3.2";
         assert!(!verify_version(version));
 
         let version = "0.2.3";
         assert!(!verify_version(version));
 
-        let version = "0.4.3";
+        let version = "0.10.3";
+        assert!(!verify_version(version));
+
+        let version = "10.10.3";
         assert!(!verify_version(version));
     }
 
