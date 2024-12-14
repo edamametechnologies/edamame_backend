@@ -187,6 +187,66 @@ mod tests {
         .is_ok());
     }
 
+    // With a bad timestamp
+    #[test]
+    fn test_signature_verification_bad_timestamp() {
+        let secret = "test_secret";
+        let request_id = "test_request";
+        let (gen_timestamp, gen_signature) = generate_signature(secret, request_id);
+        assert!(verify_signature(
+            secret,
+            gen_timestamp.parse().unwrap_or(0) + 301,
+            request_id,
+            &gen_signature
+        )
+        .is_err());
+    }
+
+    // With a bad signature
+    #[test]
+    fn test_signature_verification_bad_signature() {
+        let secret = "test_secret";
+        let request_id = "test_request";
+        let (gen_timestamp, _gen_signature) = generate_signature(secret, request_id);
+        assert!(verify_signature(
+            secret,
+            gen_timestamp.parse().unwrap_or(0),
+            request_id,
+            "bad_signature"
+        )
+        .is_err());
+    }
+
+    // With a bad request id
+    #[test]
+    fn test_signature_verification_bad_request_id() {
+        let secret = "test_secret";
+        let request_id = "test_request";
+        let (gen_timestamp, gen_signature) = generate_signature(secret, request_id);
+        assert!(verify_signature(
+            secret,
+            gen_timestamp.parse().unwrap_or(0),
+            "bad_request_id",
+            &gen_signature
+        )
+        .is_err());
+    }
+
+    // With a bad version
+    #[test]
+    fn test_signature_verification_bad_version() {
+        let secret = "test_secret";
+        let request_id = "test_request";
+        let (gen_timestamp, _gen_signature) = generate_signature(secret, request_id);
+        assert!(verify_signature(
+            secret,
+            gen_timestamp.parse().unwrap_or(0),
+            request_id,
+            "bad_version"
+        )
+        .is_err());
+    }
+
     #[test]
     fn test_version_verification() {
         let version = "0.3.3";
@@ -203,5 +263,31 @@ mod tests {
 
         let version = "0.4.3";
         assert!(!verify_version(version));
+    }
+
+    #[test]
+    fn test_header_verification() {
+        let secret = "test_secret";
+        let request_id = "test_request";
+        let (timestamp, signature) = generate_signature(secret, request_id);
+        let mut headers = HashMap::new();
+        headers.insert("x-edamame-version".to_string(), "0.3.3".to_string());
+        headers.insert("x-edamame-timestamp".to_string(), timestamp);
+        headers.insert("x-edamame-request-id".to_string(), request_id.to_string());
+        headers.insert("x-edamame-signature".to_string(), signature);
+        assert!(verify_header(secret, headers).is_ok());
+    }
+
+    #[test]
+    fn test_header_verification_bad_version() {
+        let secret = "test_secret";
+        let request_id = "test_request";
+        let (timestamp, signature) = generate_signature(secret, request_id);
+        let mut headers = HashMap::new();
+        headers.insert("x-edamame-version".to_string(), "0.3.2".to_string());
+        headers.insert("x-edamame-timestamp".to_string(), timestamp);
+        headers.insert("x-edamame-request-id".to_string(), request_id.to_string());
+        headers.insert("x-edamame-signature".to_string(), signature);
+        assert!(verify_header(secret, headers).is_err());
     }
 }
