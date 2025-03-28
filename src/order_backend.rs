@@ -9,5 +9,4 @@ pub struct MetricOrderResultBackend {
     pub timestamp: String,
     pub success: bool,
     pub validated: bool,
-    pub output: String,
 }
