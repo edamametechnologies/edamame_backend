@@ -9,6 +9,7 @@ pub mod order_backend;
 pub mod order_type_backend;
 pub mod pwned_breach_backend;
 pub mod score_backend;
+pub mod session_info_backend;
 pub mod signature;
 pub mod threat_backend;
 pub mod version;
