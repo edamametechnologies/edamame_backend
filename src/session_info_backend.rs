@@ -11,4 +11,7 @@ pub struct SessionInfoBackend {
     pub dst_asn_owner: Option<String>,
     pub criticality: String,
     pub dst_service: Option<String>,
-} 
+    pub l7_process_name: Option<String>,
+    pub l7_process_path: Option<String>,
+    pub l7_process_user: Option<String>,
+}
