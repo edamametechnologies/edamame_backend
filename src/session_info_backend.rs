@@ -3,15 +3,15 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionInfoBackend {
-    pub dst_ip: String,
-    pub dst_port: u16,
+    pub ip: String,
+    pub port: u16,
     pub protocol: String,
-    pub dst_domain: Option<String>,
-    pub dst_asn_number: Option<u32>,
-    pub dst_asn_country: Option<String>,
-    pub dst_asn_owner: Option<String>,
+    pub domain: Option<String>,
+    pub asn_number: Option<u32>,
+    pub asn_country: Option<String>,
+    pub asn_owner: Option<String>,
     pub criticality: String,
-    pub dst_service: Option<String>,
+    pub service: Option<String>,
     pub l7_process_name: Option<String>,
     pub l7_process_path: Option<String>,
     pub l7_process_user: Option<String>,
@@ -21,24 +21,24 @@ impl SessionInfoBackend {
     pub fn uid(&self, language: &str) -> String {
         let mut hasher = Hasher::new();
         hasher.update(language.as_bytes());
-        hasher.update(self.dst_ip.as_bytes());
-        hasher.update(self.dst_port.to_string().as_bytes());
+        hasher.update(self.ip.as_bytes());
+        hasher.update(self.port.to_string().as_bytes());
         hasher.update(self.protocol.as_bytes());
-        if let Some(dst_domain) = &self.dst_domain {
-            hasher.update(dst_domain.as_bytes());
+        if let Some(domain) = &self.domain {
+            hasher.update(domain.as_bytes());
         }
-        if let Some(dst_asn_number) = self.dst_asn_number {
-            hasher.update(dst_asn_number.to_string().as_bytes());
+        if let Some(asn_number) = self.asn_number {
+            hasher.update(asn_number.to_string().as_bytes());
         }
-        if let Some(dst_asn_country) = &self.dst_asn_country {
-            hasher.update(dst_asn_country.as_bytes());
+        if let Some(asn_country) = &self.asn_country {
+            hasher.update(asn_country.as_bytes());
         }
-        if let Some(dst_asn_owner) = &self.dst_asn_owner {
-            hasher.update(dst_asn_owner.as_bytes());
+        if let Some(asn_owner) = &self.asn_owner {
+            hasher.update(asn_owner.as_bytes());
         }
         hasher.update(self.criticality.as_bytes());
-        if let Some(dst_service) = &self.dst_service {
-            hasher.update(dst_service.as_bytes());
+        if let Some(service) = &self.service {
+            hasher.update(service.as_bytes());
         }
         if let Some(l7_process_name) = &self.l7_process_name {
             hasher.update(l7_process_name.as_bytes());
