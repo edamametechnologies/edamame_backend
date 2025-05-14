@@ -7,6 +7,7 @@ pub mod lanscan_port_info_backend;
 pub mod lanscan_vulnerability_info_backend;
 pub mod order_backend;
 pub mod order_type_backend;
+pub mod policy_backend;
 pub mod pwned_breach_backend;
 pub mod score_backend;
 pub mod session_info_backend;
