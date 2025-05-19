@@ -2,10 +2,10 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, PartialOrd)]
 pub struct PoliciesStatusBackend {
-    name: String,
-    passed: bool,
-    reason: Vec<ReasonBackend>,
-    providers: Vec<String>,
+    pub name: String,
+    pub passed: bool,
+    pub reason: Vec<ReasonBackend>,
+    pub providers: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, PartialOrd)]
