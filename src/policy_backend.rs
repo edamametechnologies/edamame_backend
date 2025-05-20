@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, PartialOrd)]
-struct PoliciesStatusResponseBackend {
-    policies: Vec<PoliciesStatusBackend>,
+pub struct PoliciesStatusResponseBackend {
+    pub policies: Vec<PoliciesStatusBackend>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, PartialOrd)]
