@@ -11,7 +11,7 @@ pub struct PoliciesStatusBackend {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, PartialOrd)]
 pub enum ReasonBackend {
     /// Minimum score has not been respected
-    MinScoreNotRespectedBackend {
+    MinScoreNotRespected {
         /// Required overall score
         required: u8,
 
@@ -20,7 +20,7 @@ pub enum ReasonBackend {
     },
 
     /// At least one required security check does not pass
-    SecurityChecksNotPassedBackend {
+    SecurityChecksNotPassed {
         /// Required security checks
         required: Vec<String>,
 
@@ -32,7 +32,7 @@ pub enum ReasonBackend {
     },
 
     //
-    TagsNotRespectedBackend {
+    TagsNotRespected {
         /// failed tag
         required: String,
 
