@@ -2,10 +2,10 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, PartialOrd)]
 pub struct PoliciesStatusBackend {
-    name: String,
-    passed: bool,
-    reason: Option<ReasonBackend>,
-    providers: Vec<String>,
+    pub name: String,
+    pub passed: bool,
+    pub reason: Vec<ReasonBackend>,
+    pub providers: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, PartialOrd)]
@@ -24,10 +24,10 @@ pub enum ReasonBackend {
         /// Required security checks
         required: Vec<String>,
 
-        /// Device's passed security checks (subset of required only, not all the passed)
+        // Device's passed security checks (subset of required only, not all the passed)
         passed: Vec<String>,
 
-        /// Device's failed security checks (subset of required only, not all the failed)
+        // Device's failed security checks (subset of required only, not all the failed)
         failed: Vec<String>,
     },
 
@@ -36,7 +36,7 @@ pub enum ReasonBackend {
         /// failed tag
         required: String,
 
-        /// Device's ratio tag
+        // Device's ratio tag
         got: f64,
     },
 }
