@@ -1,6 +1,11 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, PartialOrd)]
+struct PoliciesStatusResponseBackend {
+    policies: Vec<PoliciesStatusBackend>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, PartialOrd)]
 pub struct PoliciesStatusBackend {
     pub name: String,
     pub passed: bool,
