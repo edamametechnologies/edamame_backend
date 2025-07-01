@@ -111,7 +111,7 @@ pub fn generate_signature(secret: &str, request_id: &str) -> (String, String) {
     let timestamp = Utc::now().timestamp() as u64;
 
     // Prepare data to sign: concatenate timestamp and request_id
-    let data = format!("{}{}", timestamp, request_id);
+    let data = format!("{timestamp}{request_id}");
 
     // Create HMAC-SHA256 instance with the secret key
     let mut mac =
@@ -157,13 +157,13 @@ fn verify_signature_cmd(
     if !no_timestamp_check {
         let current_time = Utc::now().timestamp() as u64;
         if (current_time as i64 - timestamp as i64).abs() > 300 {
-            let error = format!("bad timestamp: {} != {}", timestamp, current_time);
+            let error = format!("bad timestamp: {timestamp} != {current_time}");
             return Err(anyhow!(error));
         }
     }
 
     // Recreate the data to sign
-    let data_to_sign = format!("{}{}", timestamp, request_id);
+    let data_to_sign = format!("{timestamp}{request_id}");
 
     // Create HMAC instance with the secret
     let mut mac =
@@ -175,13 +175,13 @@ fn verify_signature_cmd(
         Ok(decoded_signature) => {
             let ok = mac.verify_slice(&decoded_signature).is_ok();
             if !ok {
-                let error = format!("slice verification failed for {:?}", received_signature);
+                let error = format!("slice verification failed for {received_signature:?}");
                 return Err(anyhow!(error));
             };
             Ok(())
         }
         Err(_) => {
-            let error = format!("failed to decode signature: {:?}", received_signature);
+            let error = format!("failed to decode signature: {received_signature:?}");
             Err(anyhow!(error))
         }
     }
