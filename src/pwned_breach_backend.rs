@@ -34,6 +34,8 @@ pub struct BreachDetailBackend {
     pub data_classes: Vec<String>,
     pub is_verified: bool,
     pub is_sensitive: bool,
+    pub logo_path: String,
+    pub is_stealer_log: bool,
     pub criticality: PwnedCriticalityBackend,
 }
 
