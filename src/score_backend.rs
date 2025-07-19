@@ -26,6 +26,8 @@ pub struct NumericalScoreBackend {
     pub ip: String,
     pub ip6: String,
     pub mac: String,
+    // We don't use a hashmap here to keep it simple with the backend
+    pub peer_ids: Vec<(String, String)>,
     pub score: f64,
     pub connected_user: String,
     pub connected_domain: String,
@@ -38,6 +40,8 @@ pub struct DetailedScoreBackend {
     pub ip: String,
     pub ip6: String,
     pub mac: String,
+    // We don't use a hashmap here to keep it simple with the backend
+    pub peer_ids: Vec<(String, String)>,
     pub core_version: String,
     pub is_cicd: bool,
     pub city: String,
