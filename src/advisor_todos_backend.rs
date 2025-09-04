@@ -1,13 +1,23 @@
 use blake3::Hasher;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AdvisorAdviceBackend {
-    pub advice_type: String,
-    pub advice_details: String,
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub enum AdviceTypeBackend {
+    Policy,
+    Threat,
+    NetworkPort,
+    NetworkSession,
+    PwnedBreach,
+    Configure,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdvisorAdviceBackend {
+    pub advice_type: AdviceTypeBackend,
+    pub advice_details: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub enum AdvisorPriorityBackend {
     Low,
     Medium,
@@ -16,13 +26,13 @@ pub enum AdvisorPriorityBackend {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdvisorTodoBackend {
-    pub advice: Vec<AdvisorAdviceBackend>,
+    pub advice: AdvisorAdviceBackend,
     pub priority: AdvisorPriorityBackend,
-    pub timestamp: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdvisorTodosBackend {
+    pub system_overview: String,
     pub todos: Vec<AdvisorTodoBackend>,
 }
 
@@ -30,6 +40,7 @@ impl AdvisorTodosBackend {
     pub fn uid(&self, language: &str) -> String {
         let mut hasher = Hasher::new();
         hasher.update(language.as_bytes());
+        hasher.update(self.system_overview.as_bytes());
         hasher.update(format!("{:?}", self.todos).as_bytes());
         hasher.finalize().to_hex().to_string()
     }
