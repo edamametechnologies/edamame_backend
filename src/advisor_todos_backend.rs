@@ -18,7 +18,7 @@ pub struct AdvisorAdviceBackend {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-pub enum AdvisorPriorityBackend {
+pub enum AdvicePriorityBackend {
     Low,
     Medium,
     High,
@@ -27,7 +27,7 @@ pub enum AdvisorPriorityBackend {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdvisorTodoBackend {
     pub advice: AdvisorAdviceBackend,
-    pub priority: AdvisorPriorityBackend,
+    pub priority: AdvicePriorityBackend,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,12 +35,13 @@ pub struct AdvisorTodosBackend {
     pub system_overview: String,
     pub todos: Vec<AdvisorTodoBackend>,
     pub email: Option<String>,
+    pub language: String,
 }
 
 impl AdvisorTodosBackend {
-    pub fn uid(&self, language: &str) -> String {
+    pub fn uid(&self) -> String {
         let mut hasher = Hasher::new();
-        hasher.update(language.as_bytes());
+        hasher.update(self.language.as_bytes());
         hasher.update(self.system_overview.as_bytes());
         hasher.update(format!("{:?}", self.todos).as_bytes());
         hasher.finalize().to_hex().to_string()
