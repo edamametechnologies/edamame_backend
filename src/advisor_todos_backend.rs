@@ -35,13 +35,12 @@ pub struct AdvisorTodosBackend {
     pub system_overview: String,
     pub todos: Vec<AdvisorTodoBackend>,
     pub email: Option<String>,
-    pub language: String,
 }
 
 impl AdvisorTodosBackend {
-    pub fn uid(&self) -> String {
+    pub fn uid(&self, language: &str) -> String {
         let mut hasher = Hasher::new();
-        hasher.update(self.language.as_bytes());
+        hasher.update(language.as_bytes());
         hasher.update(self.system_overview.as_bytes());
         hasher.update(format!("{:?}", self.todos).as_bytes());
         hasher.finalize().to_hex().to_string()
