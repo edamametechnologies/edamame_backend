@@ -40,13 +40,28 @@ pub struct BreachDetailBackend {
 }
 
 impl BreachDetailBackend {
-    pub fn uid(&self, language: &str, user_skills: &str) -> String {
+    pub fn uid(&self, language: &str) -> String {
         let mut hasher = Hasher::new();
         hasher.update(language.as_bytes());
-        hasher.update(user_skills.as_bytes());
         hasher.update(self.name.as_bytes());
         // Description has a possibility of change, so we include it
         hasher.update(self.description.as_bytes());
+        hasher.finalize().to_hex().to_string()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Ord, PartialOrd, Eq, PartialEq)]
+pub struct BreachInfoBackend {
+    pub name: String,
+    pub description: String,
+    pub is_service: bool,
+}
+
+impl BreachInfoBackend {
+    pub fn uid(&self, language: &str) -> String {
+        let mut hasher = Hasher::new();
+        hasher.update(language.as_bytes());
+        hasher.update(self.name.as_bytes());
         hasher.finalize().to_hex().to_string()
     }
 }

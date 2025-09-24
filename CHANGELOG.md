@@ -1,0 +1,1 @@
+- 0.3.5: pwned remediation struct to use the body instead of query parameters as with other endpoints

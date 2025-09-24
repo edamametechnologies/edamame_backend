@@ -1,1 +1,1 @@
-# edamame_backend
+This is a collection of data structures used for comunication between EDAMAME agents and EDAMAME Hub backend.
