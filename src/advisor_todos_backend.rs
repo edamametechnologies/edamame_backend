@@ -35,6 +35,7 @@ pub struct AdvisorTodosBackend {
     pub system_overview: String,
     pub todos: Vec<AdvisorTodoBackend>,
     pub email: Option<String>,
+    pub question: Option<String>,
 }
 
 impl AdvisorTodosBackend {
