@@ -45,6 +45,7 @@ impl AdvisorTodosBackend {
         hasher.update(self.system_overview.as_bytes());
         hasher.update(format!("{:?}", self.todos).as_bytes());
         hasher.update(self.email.as_ref().unwrap_or(&"".to_string()).as_bytes());
+        hasher.update(self.question.as_ref().unwrap_or(&"".to_string()).as_bytes());
         hasher.finalize().to_hex().to_string()
     }
 }
