@@ -38,10 +38,13 @@ pub enum ReasonBackend {
 
     // Failed tag
     TagsNotRespectedBackend {
-        // failed tag
+        // Required tag
         required: String,
 
-        // Device's ratio tag
+        // Device's compliance ratio for tag
         got: f64,
+
+        // Security checks that were not respected
+        failed_security_checks: Vec<String>,
     },
 }
