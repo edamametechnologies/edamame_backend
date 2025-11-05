@@ -45,6 +45,8 @@ pub enum ReasonBackend {
         got: f64,
 
         // Security checks that were not respected
+        // For backward compatibility, this field is optional and defaults to an empty vector
+        #[serde(default)]
         failed_security_checks: Vec<String>,
     },
 }
