@@ -25,6 +25,8 @@ use serde::{Deserialize, Serialize};
 pub struct AgenticAnalysisRequestBackend {
     /// The pre-constructed prompt to send to the LLM
     pub prompt: String,
+    /// The system prompt to send to the LLM
+    pub system_prompt: String,
     /// Maximum tokens for the response
     pub max_tokens: u32,
 }
