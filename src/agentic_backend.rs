@@ -29,6 +29,8 @@ pub struct AgenticAnalysisRequestBackend {
     pub system_prompt: String,
     /// Maximum tokens for the response
     pub max_tokens: u32,
+    /// Type of analysis to perform (e.g., "device", "session", "breach", "threat", "policy")
+    pub analysis_type: String,
 }
 
 impl AgenticAnalysisRequestBackend {
