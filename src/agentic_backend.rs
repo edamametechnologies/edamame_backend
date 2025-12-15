@@ -1,3 +1,4 @@
+use crate::advisor_todos_backend::AdviceTypeBackend;
 use blake3::Hasher;
 use serde::{Deserialize, Serialize};
 
@@ -17,16 +18,6 @@ use serde::{Deserialize, Serialize};
 // Analysis Request Backend - Sent from LLMProvider::Backend to the backend
 // =============================================================================
 
-/// Analysis type backend
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum AnalysisTypeBackend {
-    Device,
-    Session,
-    Breach,
-    Threat,
-    Policy,
-}
-
 /// Request for agentic analysis via Backend LLM proxy
 ///
 /// The client constructs the prompt (same logic as for Claude/OpenAI) and sends
@@ -40,7 +31,7 @@ pub struct AgenticAnalysisRequestBackend {
     /// Maximum tokens for the response
     pub max_tokens: u32,
     /// Type of analysis to perform
-    pub analysis_type: AnalysisTypeBackend,
+    pub analysis_type: AdviceTypeBackend,
 }
 
 impl AgenticAnalysisRequestBackend {
