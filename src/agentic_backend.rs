@@ -17,6 +17,16 @@ use serde::{Deserialize, Serialize};
 // Analysis Request Backend - Sent from LLMProvider::Backend to the backend
 // =============================================================================
 
+/// Analysis type backend
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AnalysisTypeBackend {
+    Device,
+    Session,
+    Breach,
+    Threat,
+    Policy,
+}
+
 /// Request for agentic analysis via Backend LLM proxy
 ///
 /// The client constructs the prompt (same logic as for Claude/OpenAI) and sends
@@ -29,8 +39,8 @@ pub struct AgenticAnalysisRequestBackend {
     pub system_prompt: String,
     /// Maximum tokens for the response
     pub max_tokens: u32,
-    /// Type of analysis to perform (e.g., "device", "session", "breach", "threat", "policy")
-    pub analysis_type: String,
+    /// Type of analysis to perform
+    pub analysis_type: AnalysisTypeBackend,
 }
 
 impl AgenticAnalysisRequestBackend {
