@@ -47,32 +47,9 @@ impl AgenticAnalysisRequestBackend {
 // Decision Backend - LLM's decision (extracted from tool call response)
 // =============================================================================
 
-/// LLM's decision about a todo (same structure as TodoDecision)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AgenticDecisionBackend {
-    /// Action to take: "auto_resolve" or "escalate"
-    pub action: String,
-    /// Detailed reasoning for this decision
-    pub reasoning: String,
-    /// Risk score from 0.0 (very safe) to 1.0 (critical risk)
-    pub risk_score: f64,
-    /// Priority for escalated items: "low", "medium", "high", "critical"
-    pub priority: String,
-    /// Recommended follow-up actions
-    pub recommended_actions: Vec<String>,
-}
-
-impl AgenticDecisionBackend {
-    pub fn uid(&self) -> String {
-        let mut hasher = Hasher::new();
-        hasher.update(self.action.as_bytes());
-        hasher.update(self.reasoning.as_bytes());
-        hasher.update(self.risk_score.to_bits().to_le_bytes().as_slice());
-        hasher.update(self.priority.as_bytes());
-        hasher.update(self.recommended_actions.join("|").as_bytes());
-        hasher.finalize().to_hex().to_string()
-    }
-}
+/// LLM's decision about a todo - Raw string response from backend LLM
+/// The backend returns the raw LLM response which needs to be parsed like Claude/OpenAI
+pub type AgenticDecisionBackend = String;
 
 // =============================================================================
 // Analysis Response Backend - Returned from the backend
@@ -80,12 +57,12 @@ impl AgenticDecisionBackend {
 
 /// Response from agentic analysis via Backend LLM proxy
 ///
-/// The backend has forwarded the prompt to its internal LLM, parsed the
-/// tool call response, and returns the extracted decision.
+/// The backend returns the raw LLM response (text completion) that needs to be parsed
+/// for the make_decision tool call, similar to Claude/OpenAI responses.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgenticAnalysisResponseBackend {
-    /// The LLM's decision (extracted from make_decision tool call)
-    pub decision: AgenticDecisionBackend,
+    /// The raw LLM response text (needs parsing for tool call)
+    pub response_text: String,
     /// Input tokens consumed
     pub input_tokens: u32,
     /// Output tokens generated
@@ -95,7 +72,7 @@ pub struct AgenticAnalysisResponseBackend {
 impl AgenticAnalysisResponseBackend {
     pub fn uid(&self) -> String {
         let mut hasher = Hasher::new();
-        hasher.update(self.decision.uid().as_bytes());
+        hasher.update(self.response_text.as_bytes());
         hasher.update(self.input_tokens.to_le_bytes().as_slice());
         hasher.update(self.output_tokens.to_le_bytes().as_slice());
         hasher.finalize().to_hex().to_string()
