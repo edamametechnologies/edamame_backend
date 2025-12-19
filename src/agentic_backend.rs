@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgenticAnalysisRequestBackend {
     /// The pre-constructed prompt to send to the LLM
+    /// This must include the make_decision tool call.
     pub prompt: String,
     /// The system prompt to send to the LLM
     pub system_prompt: String,
