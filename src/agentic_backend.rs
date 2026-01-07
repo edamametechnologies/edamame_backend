@@ -74,3 +74,13 @@ impl AgenticAnalysisResponseBackend {
         hasher.finalize().to_hex().to_string()
     }
 }
+
+/// Response from agentic subscription status endpoint
+/// Returns the user's plan and current usage information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgenticSubscriptionStatusBackend {
+    /// The name of the user's subscription plan (e.g., "free", "pro", "enterprise")
+    pub plan_name: String,
+    /// Current usage as a percentage (0.0 to 1.0, where 1.0 = 100% of quota used)
+    pub usage: f64,
+}
