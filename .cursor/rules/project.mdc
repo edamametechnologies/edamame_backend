@@ -1,12 +1,17 @@
-# CLAUDE.md
+---
+description: "EDAMAME Backend - API Data Structures Library"
+alwaysApply: true
+---
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+# EDAMAME Backend - API Data Structures Library
+
+> **Master Repository:** `edamame_app` - See `../edamame_app/.cursor/rules/workspace.mdc` for workspace-wide rules.
 
 ## Project Overview
 
 EDAMAME Backend is a Rust library providing data structures for communication between EDAMAME agents and the EDAMAME Hub backend. It defines serializable types for threat detection, network scanning, agentic analysis, and security advisories.
 
-Part of the EDAMAME ecosystem - see `../edamame_core/CLAUDE.md` for full ecosystem documentation.
+Part of the EDAMAME ecosystem. See **[EDAMAME Core API](https://github.com/edamametechnologies/edamame_core_api)** for the public API documentation of the core engine that consumes these data structures.
 
 ## Build Commands
 
