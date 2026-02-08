@@ -22,6 +22,7 @@ pub enum AdvicePriorityBackend {
     Low,
     Medium,
     High,
+    Critical,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
