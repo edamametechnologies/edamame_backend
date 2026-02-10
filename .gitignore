@@ -6,3 +6,5 @@
 
 # Rust
 target/
+
+.cursor
