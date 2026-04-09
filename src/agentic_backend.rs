@@ -293,3 +293,98 @@ impl AgenticNotificationBackend {
         hasher.finalize().to_hex().to_string()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_notification() -> AgenticNotificationBackend {
+        AgenticNotificationBackend {
+            source: AgenticNotificationSourceBackend::Vulnerability,
+            criticality: AgenticNotificationCriticalityBackend::Critical,
+            timestamp: Utc::now(),
+            hostname: "test-host".to_string(),
+            ip4: "192.168.1.1".to_string(),
+            ip6: "::1".to_string(),
+            model: "TestModel".to_string(),
+            os_version: "Linux 6.5".to_string(),
+            title: "Test finding".to_string(),
+            body: "Suspicious process detected".to_string(),
+            process_name: Some("curl".to_string()),
+            destination_domain: Some("evil.example.com".to_string()),
+            destination_ip: Some("10.0.0.1".to_string()),
+            destination_port: Some(443),
+            active_findings_count: 1,
+            security_score: Some(3.5),
+            verdict: Some("FINDINGS".to_string()),
+            decision_source: Some("LLM_CONFIRMED".to_string()),
+            findings: vec![AgenticNotificationFindingBackend {
+                finding_key: "token_exfiltration|curl|evil.example.com:443".to_string(),
+                severity: "HIGH".to_string(),
+                description: "Anomalous outbound to evil.example.com".to_string(),
+                reference: "CVE-2025-30066".to_string(),
+                process_name: Some("curl".to_string()),
+                destination_domain: Some("evil.example.com".to_string()),
+                destination_ip: Some("10.0.0.1".to_string()),
+                destination_port: Some(443),
+                dismissed: false,
+            }],
+            actions: Vec::new(),
+            auto_resolved_count: 0,
+            requires_confirmation_count: 0,
+            escalated_count: 0,
+            failed_count: 0,
+        }
+    }
+
+    #[test]
+    fn test_notification_roundtrip_serialization() {
+        let notification = sample_notification();
+        let json = serde_json::to_string(&notification).expect("serialization should succeed");
+        let parsed: AgenticNotificationBackend =
+            serde_json::from_str(&json).expect("deserialization should succeed");
+        assert_eq!(parsed.source, notification.source);
+        assert_eq!(parsed.criticality, notification.criticality);
+        assert_eq!(parsed.title, notification.title);
+        assert_eq!(parsed.active_findings_count, 1);
+        assert_eq!(parsed.findings.len(), 1);
+        assert_eq!(
+            parsed.findings[0].finding_key,
+            "token_exfiltration|curl|evil.example.com:443"
+        );
+    }
+
+    #[test]
+    fn test_notification_uid_deterministic() {
+        let notification = sample_notification();
+        let uid1 = notification.uid();
+        let uid2 = notification.uid();
+        assert_eq!(uid1, uid2, "uid should be deterministic");
+        assert!(!uid1.is_empty());
+    }
+
+    #[test]
+    fn test_notification_uid_varies_with_content() {
+        let mut n1 = sample_notification();
+        let mut n2 = sample_notification();
+        n2.title = "Different finding".to_string();
+        let uid1 = n1.uid();
+        let uid2 = n2.uid();
+        assert_ne!(uid1, uid2, "different content should produce different uid");
+
+        n1.active_findings_count = 5;
+        assert_ne!(n1.uid(), uid1, "changing findings count should change uid");
+    }
+
+    #[test]
+    fn test_notification_source_display() {
+        assert_eq!(
+            AgenticNotificationSourceBackend::Vulnerability.to_string(),
+            "vulnerability"
+        );
+        assert_eq!(
+            AgenticNotificationSourceBackend::Divergence.to_string(),
+            "divergence"
+        );
+    }
+}
