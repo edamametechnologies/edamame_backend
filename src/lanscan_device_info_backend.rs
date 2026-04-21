@@ -23,7 +23,7 @@ impl DeviceInfoBackend {
         sorted_vulnerabilities.sort_by(|a, b| a.name.cmp(&b.name));
         hasher.update(format!("{sorted_vulnerabilities:?}").as_bytes());
         let mut sorted_open_ports = self.open_ports.clone();
-        sorted_open_ports.sort_by(|a, b| a.port.cmp(&b.port));
+        sorted_open_ports.sort_by_key(|a| a.port);
         hasher.update(format!("{sorted_open_ports:?}").as_bytes());
         hasher.finalize().to_hex().to_string()
     }
