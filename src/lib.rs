@@ -1,5 +1,6 @@
 pub mod advisor_todos_backend;
 pub mod agentic_backend;
+pub mod agentic_dismissal_report_backend;
 pub mod feedback_info_backend;
 pub mod helper_state_backend;
 pub mod history_backend;
