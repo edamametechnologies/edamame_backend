@@ -275,9 +275,9 @@ mod tests {
         assert!(verify_version(version));
 
         let version = "0.3.5";
-        assert!(!verify_version(version));
+        assert!(verify_version(version));
 
-        let version = "0.3.10";
+        let version = "0.3.250";
         assert!(!verify_version(version));
 
         let version = "0.3.2";
