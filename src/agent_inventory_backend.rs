@@ -48,8 +48,8 @@ pub struct AgentInventoryRowBackend {
     pub acknowledged: bool,
     /// Count of MCP endpoints declared by this agent.
     pub mcp_endpoint_count: u32,
-    /// Count of SBOM components attributed to this agent.
-    pub sbom_component_count: u32,
+    /// Count of components attributed to this agent.
+    pub component_count: u32,
     /// Count of high-or-critical visibility findings touching this agent.
     pub alertable_finding_count: u32,
 }
@@ -66,7 +66,7 @@ impl AgentInventoryRowBackend {
             self.acknowledged as u8,
         ]);
         hasher.update(self.mcp_endpoint_count.to_le_bytes().as_slice());
-        hasher.update(self.sbom_component_count.to_le_bytes().as_slice());
+        hasher.update(self.component_count.to_le_bytes().as_slice());
         hasher.update(self.alertable_finding_count.to_le_bytes().as_slice());
         hasher.finalize().to_hex().to_string()
     }

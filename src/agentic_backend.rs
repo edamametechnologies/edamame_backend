@@ -97,9 +97,6 @@ pub enum AgenticNotificationSourceBackend {
     Vulnerability,
     /// Two-plane divergence detection between intent model and system telemetry.
     Divergence,
-    /// Agent SBOM / capability-surface baseline drift (new MCP server, tool,
-    /// secret binding, or changed instruction file vs the approved baseline).
-    Sbom,
     /// Periodic actions report (auto-resolved, pending confirmation counts).
     ActionReport,
     /// Escalation alert (escalated actions needing human review, or failed actions).
@@ -111,7 +108,6 @@ impl std::fmt::Display for AgenticNotificationSourceBackend {
         match self {
             Self::Vulnerability => write!(f, "vulnerability"),
             Self::Divergence => write!(f, "divergence"),
-            Self::Sbom => write!(f, "sbom"),
             Self::ActionReport => write!(f, "action_report"),
             Self::Escalation => write!(f, "escalation"),
         }
