@@ -40,6 +40,8 @@ pub struct DetailedScoreBackend {
     pub ip: String,
     pub ip6: String,
     pub mac: String,
+    // Hostname without domain suffix
+    pub hostname: String,
     // We don't use a hashmap here to keep it simple with the backend
     pub peer_ids: Vec<(String, String)>,
     pub core_version: String,
