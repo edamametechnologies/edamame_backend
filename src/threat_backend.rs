@@ -59,6 +59,10 @@ pub enum ThreatStatusBackend {
     Unknown,
 }
 
+/// Pass/fail status of one check. Structured detail naming *why* a check failed
+/// travels out-of-band in `DetailedScoreBackend.details`, not here, so that
+/// consent governs the whole payload in one place -- see
+/// [`crate::detail_backend`].
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, PartialOrd)]
 pub struct ThreatMetricBackend {
     pub metric: ThreatMetricJSONBackend,

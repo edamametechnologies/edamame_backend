@@ -1,3 +1,4 @@
+use crate::detail_backend::DetailBackend;
 use crate::helper_state_backend::HelperStateBackend;
 use crate::history_backend::OrderHistoryBackend;
 use crate::threat_backend::ThreatMetricsBackend;
@@ -58,4 +59,15 @@ pub struct DetailedScoreBackend {
     pub timestamp: String,
     pub connected_user: String,
     pub connected_domain: String,
+    /// Structured detail, one bundle per data class (today: one `ai` bundle).
+    /// Each bundle carries its own consent mode plus the coverage and failure
+    /// evidence collected under it -- see [`crate::detail_backend`].
+    ///
+    /// Empty means the client predates the field: the Hub treats that as denied
+    /// for detail, while check *status* still applies. A known-but-denied domain
+    /// emits an explicit `mode: "denied"` bundle with no payload, which is what
+    /// distinguishes a refusal from an old client.
+    /// `#[serde(default)]`: older agents omit this field on the wire.
+    #[serde(default)]
+    pub details: Vec<DetailBackend>,
 }
