@@ -64,8 +64,8 @@ impl DetailModeBackend {
 }
 
 /// Closed vocabulary of failure fact kinds used by Hub governance whitelisting.
-/// Keys are normalized at emit time (process basename, MCP server_name, harness
-/// slug, secret label).
+/// Keys are normalized at emit time (process basename, MCP server_name, MCP rule
+/// id, harness slug, secret label).
 ///
 /// Every kind here is an AI-posture kind today, but the carrier is
 /// domain-generic: another domain that can name what made a check fail adds a
@@ -77,6 +77,7 @@ pub enum FailureFactKindBackend {
     Amplifier,
     CriticalProcess,
     McpServer,
+    McpRule,
     Harness,
     ExpectedHarness,
     SecretLabel,
@@ -90,6 +91,7 @@ impl FailureFactKindBackend {
             Self::Amplifier => "amplifier",
             Self::CriticalProcess => "critical_process",
             Self::McpServer => "mcp_server",
+            Self::McpRule => "mcp_rule",
             Self::Harness => "harness",
             Self::ExpectedHarness => "expected_harness",
             Self::SecretLabel => "secret_label",
