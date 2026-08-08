@@ -13,8 +13,8 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Hard cap on failure facts per check in a single score report.
-pub const MAX_FAILURE_FACTS: usize = 32;
+/// Hard cap on failure causes per check in a single score report.
+pub const MAX_FAILURE_CAUSES: usize = 32;
 
 /// Data class one [`DetailBackend`] bundle covers.
 ///
@@ -63,61 +63,155 @@ impl DetailModeBackend {
     }
 }
 
-/// Closed vocabulary of failure fact kinds used by Hub governance whitelisting.
-/// Keys are normalized at emit time (process basename, MCP server_name, MCP rule
-/// id, harness slug, secret label).
+/// Closed vocabulary of failure selector kinds used by Hub governance
+/// whitelisting. Keys are normalized at emit time (process basename, MCP
+/// server_name, MCP rule id, secret label).
 ///
 /// Every kind here is an AI-posture kind today, but the carrier is
 /// domain-generic: another domain that can name what made a check fail adds a
 /// kind rather than a parallel structure. Stringly-typed on the wire for the
 /// same forward-compatibility reason as [`DetailDomainBackend`].
+///
+/// Note there is deliberately no `agent` selector kind. The agent is the
+/// *subject* of a cause ([`FailureCauseBackend::scope`]), never an acceptable
+/// reason to pass a check -- otherwise "accept cursor" would silently accept
+/// every future failure cursor develops.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum FailureFactKindBackend {
-    Agent,
+pub enum FailureSelectorKindBackend {
+    /// Broad blast-radius condition (`passwordless_root`, `critical_subprocess`,
+    /// `secret_exposure`).
     Amplifier,
+    /// Normalized basename of a critical subprocess the agent spawned.
     CriticalProcess,
+    /// MCP server name declared by an agent.
     McpServer,
+    /// MCP exposure rule id.
     McpRule,
-    Harness,
-    ExpectedHarness,
+    /// Governance-harness state for the scoped agent (`missing`, `diverging`).
+    HarnessState,
+    /// Class of secret material reachable by the agent.
     SecretLabel,
+    /// Host-side transcript observer state for the scoped agent (`paused`).
     Observer,
 }
 
-impl FailureFactKindBackend {
+impl FailureSelectorKindBackend {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Agent => "agent",
             Self::Amplifier => "amplifier",
             Self::CriticalProcess => "critical_process",
             Self::McpServer => "mcp_server",
             Self::McpRule => "mcp_rule",
-            Self::Harness => "harness",
-            Self::ExpectedHarness => "expected_harness",
+            Self::HarnessState => "harness_state",
             Self::SecretLabel => "secret_label",
             Self::Observer => "observer",
         }
     }
 }
 
-/// One structured failure detail naming what made a check fail.
-/// Whitelist matching uses `(kind, key)` with an optional `scope`.
+/// One way to name a failure cause. A whitelist rule matches a selector.
 ///
 /// Wire token form (for display / docs): `{kind}:{key}` e.g.
 /// `critical_process:ssh`, `mcp_server:gojiberry`, `amplifier:passwordless_root`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct FailureFactBackend {
-    /// Fact kind -- see [`FailureFactKindBackend`].
+pub struct FailureSelectorBackend {
+    /// Selector kind -- see [`FailureSelectorKindBackend`].
     pub kind: String,
-    /// Normalized stable key (process basename, MCP server_name, harness slug, …).
+    /// Normalized stable key (process basename, MCP server_name, secret label, …).
     pub key: String,
-    /// Optional subject narrowing the fact. AI posture checks put the agent slug
-    /// here (`cursor`, `claude_code`, …). Empty when host-global.
+}
+
+impl FailureSelectorBackend {
+    pub fn new(kind: FailureSelectorKindBackend, key: impl Into<String>) -> Self {
+        Self {
+            kind: kind.as_str().to_string(),
+            key: key.into(),
+        }
+    }
+
+    /// Display / whitelist token: `kind:key`.
+    pub fn token(&self) -> String {
+        format!("{}:{}", self.kind, self.key)
+    }
+}
+
+/// One independent reason a check failed, plus every alternative way to name it.
+///
+/// The cause is the unit of acceptance. A cause is covered when a whitelist rule
+/// matches **any** of its `selectors` (they describe the same condition at
+/// different granularities -- `mcp_rule` accepts the exposure class everywhere,
+/// `mcp_server` accepts one server). A check can be marked passing only when
+/// **every** cause is covered, so accepting one condition never silently accepts
+/// a different one on the same agent.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct FailureCauseBackend {
+    /// Subject this cause belongs to. AI posture checks put the agent slug here
+    /// (`cursor`, `claude_code`, …). Empty when host-global.
+    pub scope: String,
+    /// Alternative names for this one condition. Never empty.
+    pub selectors: Vec<FailureSelectorBackend>,
+}
+
+impl FailureCauseBackend {
+    pub fn new(scope: impl Into<String>, selectors: Vec<FailureSelectorBackend>) -> Self {
+        Self {
+            scope: scope.into(),
+            selectors,
+        }
+    }
+
+    /// A cause with no selector can never be accepted, so it must never ship.
+    pub fn is_valid(&self) -> bool {
+        !self.selectors.is_empty()
+            && self
+                .selectors
+                .iter()
+                .all(|s| !s.kind.is_empty() && !s.key.is_empty())
+    }
+
+    /// Stable identity across reports: scope plus the selector token set.
+    /// Selectors are emitted sorted, so this is order-independent in practice.
+    pub fn fingerprint(&self) -> String {
+        let mut tokens: Vec<String> = self.selectors.iter().map(|s| s.token()).collect();
+        tokens.sort();
+        tokens.dedup();
+        format!("{}|{}", self.scope, tokens.join(","))
+    }
+}
+
+/// Closed vocabulary of diagnostic-context kinds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum CheckContextKindBackend {
+    /// Governance harness detected on the host (`nono`, `srt`, …).
+    Harness,
+}
+
+impl CheckContextKindBackend {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Harness => "harness",
+        }
+    }
+}
+
+/// Display-only fact that helps an operator read a finding but is **never**
+/// whitelist-matched.
+///
+/// A detected harness is the canonical example: knowing that `nono` is installed
+/// explains why `harness_divergence` fired rather than `agents_without_harness`,
+/// but "a harness is installed" is not a reason to accept an agent escaping it.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CheckContextBackend {
+    /// Context kind -- see [`CheckContextKindBackend`].
+    pub kind: String,
+    /// Normalized stable key.
+    pub key: String,
+    /// Optional subject. Empty when host-global.
     pub scope: String,
 }
 
-impl FailureFactBackend {
-    pub fn new(kind: FailureFactKindBackend, key: impl Into<String>) -> Self {
+impl CheckContextBackend {
+    pub fn new(kind: CheckContextKindBackend, key: impl Into<String>) -> Self {
         Self {
             kind: kind.as_str().to_string(),
             key: key.into(),
@@ -130,34 +224,49 @@ impl FailureFactBackend {
         self
     }
 
-    /// Display / whitelist token: `kind:key` (scope is matched separately).
     pub fn token(&self) -> String {
         format!("{}:{}", self.kind, self.key)
     }
 }
 
-/// Facts for one failing check, keyed by the check's metric name.
+/// Evidence for one failing check, keyed by the check's metric name.
 ///
 /// Keyed here rather than carried on `ThreatMetricBackend` so that consent
-/// governs one place: dropping the bundle drops every fact with it, instead of
+/// governs one place: dropping the bundle drops every cause with it, instead of
 /// requiring a sweep over the metric list before send.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CheckDetailBackend {
     /// Metric name of the failing check (`agents_with_blast_radius`, …).
     pub check: String,
-    /// What made it fail. Never empty -- a check with no facts is omitted.
-    pub facts: Vec<FailureFactBackend>,
-    /// True when emit-time capping dropped additional facts.
+    /// Independent reasons the check failed. Every one must be covered before
+    /// the Hub may derive a passing governance status.
+    pub causes: Vec<FailureCauseBackend>,
+    /// Display-only diagnostics. Never whitelist-matched.
+    pub context: Vec<CheckContextBackend>,
+    /// True when emit-time capping dropped additional causes. A truncated check
+    /// can never derive a passing governance status: the dropped causes are
+    /// unknown, so "everything is covered" is unprovable.
     pub truncated: bool,
 }
 
 impl CheckDetailBackend {
-    pub fn new(check: impl Into<String>, facts: Vec<FailureFactBackend>, truncated: bool) -> Self {
+    pub fn new(
+        check: impl Into<String>,
+        causes: Vec<FailureCauseBackend>,
+        context: Vec<CheckContextBackend>,
+        truncated: bool,
+    ) -> Self {
         Self {
             check: check.into(),
-            facts,
+            causes,
+            context,
             truncated,
         }
+    }
+
+    /// Nothing to report for this check.
+    pub fn is_empty(&self) -> bool {
+        self.causes.is_empty() && self.context.is_empty()
     }
 }
 
@@ -186,9 +295,9 @@ impl CoverageKindBackend {
 ///
 /// Coverage is inventory, not evidence. Rows are emitted for every known
 /// subject regardless of check status, carry no failing detail, and are never
-/// whitelist-matched -- that is [`FailureFactBackend`]'s job. They exist
+/// whitelist-matched -- that is [`FailureCauseBackend`]'s job. They exist
 /// because a boolean check cannot separate "absent" from "present and
-/// healthy": both are Inactive. See `edamame_core/AIGOVERNANCE.md` §6.
+/// healthy": both are Inactive. See `edamame_core/AIGOVERNANCE.md`.
 ///
 /// For `agent` rows, `present` means the transcript root is reachable and
 /// `monitored` means the host-side observer is active.
@@ -303,12 +412,14 @@ mod tests {
     fn sample_checks() -> Vec<CheckDetailBackend> {
         vec![CheckDetailBackend::new(
             "unsecured_cursor",
-            vec![
-                FailureFactBackend::new(FailureFactKindBackend::Agent, "cursor")
-                    .with_scope("cursor"),
-                FailureFactBackend::new(FailureFactKindBackend::Observer, "paused")
-                    .with_scope("cursor"),
-            ],
+            vec![FailureCauseBackend::new(
+                "cursor",
+                vec![FailureSelectorBackend::new(
+                    FailureSelectorKindBackend::Observer,
+                    "paused",
+                )],
+            )],
+            Vec::new(),
             false,
         )]
     }
@@ -344,10 +455,16 @@ mod tests {
         assert_eq!(json["coverage"][0]["monitored"], false);
         assert_eq!(json["checks"][0]["check"], "unsecured_cursor");
         assert_eq!(json["checks"][0]["truncated"], false);
-        assert_eq!(json["checks"][0]["facts"][0]["kind"], "agent");
-        assert_eq!(json["checks"][0]["facts"][0]["key"], "cursor");
-        assert_eq!(json["checks"][0]["facts"][0]["scope"], "cursor");
-        assert_eq!(json["checks"][0]["facts"][1]["kind"], "observer");
+        assert_eq!(json["checks"][0]["causes"][0]["scope"], "cursor");
+        assert_eq!(
+            json["checks"][0]["causes"][0]["selectors"][0]["kind"],
+            "observer"
+        );
+        assert_eq!(
+            json["checks"][0]["causes"][0]["selectors"][0]["key"],
+            "paused"
+        );
+        assert!(json["checks"][0]["context"].as_array().unwrap().is_empty());
     }
 
     #[test]
@@ -374,9 +491,81 @@ mod tests {
     }
 
     #[test]
-    fn fact_token_is_kind_colon_key() {
-        let fact = FailureFactBackend::new(FailureFactKindBackend::CriticalProcess, "ssh");
-        assert_eq!(fact.token(), "critical_process:ssh");
-        assert!(fact.scope.is_empty());
+    fn selector_token_is_kind_colon_key() {
+        let selector =
+            FailureSelectorBackend::new(FailureSelectorKindBackend::CriticalProcess, "ssh");
+        assert_eq!(selector.token(), "critical_process:ssh");
+    }
+
+    #[test]
+    fn cause_without_selectors_is_invalid() {
+        let cause = FailureCauseBackend::new("cursor", Vec::new());
+        assert!(!cause.is_valid());
+    }
+
+    #[test]
+    fn cause_with_blank_selector_key_is_invalid() {
+        let cause = FailureCauseBackend::new(
+            "cursor",
+            vec![FailureSelectorBackend::new(
+                FailureSelectorKindBackend::McpServer,
+                "",
+            )],
+        );
+        assert!(!cause.is_valid());
+    }
+
+    #[test]
+    fn cause_fingerprint_is_selector_order_independent() {
+        let a = FailureCauseBackend::new(
+            "cursor",
+            vec![
+                FailureSelectorBackend::new(FailureSelectorKindBackend::McpRule, "shell_exec"),
+                FailureSelectorBackend::new(FailureSelectorKindBackend::McpServer, "gojiberry"),
+            ],
+        );
+        let b = FailureCauseBackend::new(
+            "cursor",
+            vec![
+                FailureSelectorBackend::new(FailureSelectorKindBackend::McpServer, "gojiberry"),
+                FailureSelectorBackend::new(FailureSelectorKindBackend::McpRule, "shell_exec"),
+            ],
+        );
+        assert_eq!(a.fingerprint(), b.fingerprint());
+    }
+
+    #[test]
+    fn cause_fingerprint_separates_scopes() {
+        let selectors = vec![FailureSelectorBackend::new(
+            FailureSelectorKindBackend::Observer,
+            "paused",
+        )];
+        let cursor = FailureCauseBackend::new("cursor", selectors.clone());
+        let claude = FailureCauseBackend::new("claude_code", selectors);
+        assert_ne!(cursor.fingerprint(), claude.fingerprint());
+    }
+
+    #[test]
+    fn context_is_separate_from_causes_on_the_wire() {
+        let detail = CheckDetailBackend::new(
+            "harness_divergence",
+            vec![FailureCauseBackend::new(
+                "cursor",
+                vec![FailureSelectorBackend::new(
+                    FailureSelectorKindBackend::CriticalProcess,
+                    "ssh",
+                )],
+            )],
+            vec![CheckContextBackend::new(CheckContextKindBackend::Harness, "nono")
+                .with_scope("cursor")],
+            false,
+        );
+        let json = serde_json::to_value(&detail).expect("serialize");
+        assert_eq!(json["causes"][0]["selectors"][0]["kind"], "critical_process");
+        assert_eq!(json["context"][0]["kind"], "harness");
+        assert_eq!(json["context"][0]["key"], "nono");
+        assert_eq!(json["context"][0]["scope"], "cursor");
+        // Context carries no selectors: it can never be matched by a rule.
+        assert!(json["context"][0].get("selectors").is_none());
     }
 }
