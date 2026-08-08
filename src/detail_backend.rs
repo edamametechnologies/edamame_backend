@@ -556,12 +556,17 @@ mod tests {
                     "ssh",
                 )],
             )],
-            vec![CheckContextBackend::new(CheckContextKindBackend::Harness, "nono")
-                .with_scope("cursor")],
+            vec![
+                CheckContextBackend::new(CheckContextKindBackend::Harness, "nono")
+                    .with_scope("cursor"),
+            ],
             false,
         );
         let json = serde_json::to_value(&detail).expect("serialize");
-        assert_eq!(json["causes"][0]["selectors"][0]["kind"], "critical_process");
+        assert_eq!(
+            json["causes"][0]["selectors"][0]["kind"],
+            "critical_process"
+        );
         assert_eq!(json["context"][0]["kind"], "harness");
         assert_eq!(json["context"][0]["key"], "nono");
         assert_eq!(json["context"][0]["scope"], "cursor");
