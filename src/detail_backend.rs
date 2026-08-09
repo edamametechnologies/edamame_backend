@@ -1,10 +1,11 @@
 //! Structured per-domain detail shipped alongside a score report.
 //!
 //! One [`DetailBackend`] bundle per data class. A bundle carries its own consent
-//! mode, the inventory of what EDAMAME can see (`coverage`), and the evidence
-//! naming why individual checks failed (`checks`). Bundling them means consent
-//! and payload cannot drift apart on the wire: a denied bundle is structurally
-//! incapable of carrying detail (see [`DetailBackend::with_payload`]).
+//! mode, the observation tri-state (`coverage`), the always-on posture snapshot
+//! (`inventory`), and the evidence naming why individual checks failed
+//! (`checks`). Bundling them means consent and payload cannot drift apart on
+//! the wire: a denied bundle is structurally incapable of carrying detail (see
+//! [`DetailBackend::with_payload`]).
 //!
 //! Today the only domain is `ai`. A future domain (FIM, capture, …) is an extra
 //! element in `DetailedScoreBackend.details`, not a new top-level field.
@@ -15,6 +16,17 @@ use serde::{Deserialize, Serialize};
 
 /// Hard cap on failure causes per check in a single score report.
 pub const MAX_FAILURE_CAUSES: usize = 32;
+
+/// Hard caps on the always-on posture inventory. Unlike [`MAX_FAILURE_CAUSES`],
+/// hitting these is display-only: inventory is never whitelist-matched, so a
+/// dropped row cannot make an uncovered cause look covered. See
+/// [`AiInventoryBackend::truncated`].
+pub const MAX_INVENTORY_AGENTS: usize = 32;
+pub const MAX_INVENTORY_HARNESSES: usize = 32;
+pub const MAX_INVENTORY_MCP_SERVERS_PER_AGENT: usize = 64;
+pub const MAX_INVENTORY_CRITICAL_PROCESSES_PER_AGENT: usize = 32;
+pub const MAX_INVENTORY_SECRET_LABELS_PER_AGENT: usize = 32;
+pub const MAX_INVENTORY_RULE_IDS_PER_SERVER: usize = 16;
 
 /// Data class one [`DetailBackend`] bundle covers.
 ///
@@ -340,7 +352,8 @@ impl CoverageRowBackend {
 }
 
 /// Everything one detail domain contributed to this report: the consent it was
-/// collected under, what EDAMAME can see, and why checks failed.
+/// collected under, what EDAMAME can see (coverage + posture inventory), and
+/// why checks failed.
 ///
 /// A bundle is emitted for every domain the client knows about *including
 /// denied ones* -- an explicit `mode: "denied"` bundle is what lets the Hub tell
@@ -351,15 +364,13 @@ pub struct DetailBackend {
     pub domain: String,
     /// Consent state -- see [`DetailModeBackend`].
     pub mode: String,
-    /// Inventory of observable subjects. Empty when denied, or when the domain
-    /// has nothing to inventory.
-    /// `#[serde(default)]`: tolerate a producer that omits the field.
-    #[serde(default)]
+    /// Minimal observation tri-state (present/monitored). Empty when denied.
     pub coverage: Vec<CoverageRowBackend>,
+    /// Always-on AI posture snapshot (sandbox / harness / amplifiers / MCP).
+    /// Informational only -- never whitelist-matched. `None` when denied.
+    pub inventory: Option<AiInventoryBackend>,
     /// Per-check failure evidence. Empty when denied, or when no check in this
     /// domain is failing.
-    /// `#[serde(default)]`: tolerate a producer that omits the field.
-    #[serde(default)]
     pub checks: Vec<CheckDetailBackend>,
 }
 
@@ -371,6 +382,7 @@ impl DetailBackend {
             domain: domain.as_str().to_string(),
             mode: mode.as_str().to_string(),
             coverage: Vec::new(),
+            inventory: None,
             checks: Vec::new(),
         }
     }
@@ -380,20 +392,114 @@ impl DetailBackend {
         self.mode != DetailModeBackend::Denied.as_str()
     }
 
-    /// Attach inventory and evidence. **No-op when the mode denies export**, so
-    /// "denied" and "carries detail" cannot both be true on the wire regardless
-    /// of what the caller computed.
+    /// Attach coverage, posture inventory, and evidence. **No-op when the mode
+    /// denies export**, so "denied" and "carries detail" cannot both be true on
+    /// the wire regardless of what the caller computed.
     pub fn with_payload(
         mut self,
         coverage: Vec<CoverageRowBackend>,
         checks: Vec<CheckDetailBackend>,
+        inventory: Option<AiInventoryBackend>,
     ) -> Self {
         if self.allows_detail() {
             self.coverage = coverage;
             self.checks = checks;
+            self.inventory = inventory;
+        } else {
+            self.coverage.clear();
+            self.checks.clear();
+            self.inventory = None;
         }
         self
     }
+}
+
+/// Always-on AI posture snapshot for Hub / local drill-down.
+///
+/// Independent of Active checks: emit whenever export is allowed so admins can
+/// inspect sandbox, harness, privilege amplifiers, and MCP even when green.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct AiInventoryBackend {
+    pub host: AiHostInventoryBackend,
+    /// Full known harness roster with a `detected` flag per slug.
+    pub harnesses: Vec<AiHarnessInventoryBackend>,
+    pub agents: Vec<AiAgentInventoryBackend>,
+    /// True when an inventory cap dropped rows. Display-only: unlike
+    /// [`CheckDetailBackend::truncated`], this must never change a derived
+    /// governance verdict, because inventory is not the matched surface.
+    pub truncated: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct AiHostInventoryBackend {
+    pub assessed: bool,
+    pub passwordless_root: bool,
+    pub admin_user: bool,
+    pub elevated_session: bool,
+    pub user: String,
+    pub platform: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct AiHarnessInventoryBackend {
+    pub slug: String,
+    pub display_name: String,
+    pub detected: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct AiAgentInventoryBackend {
+    /// Normalized agent key. Uses the same normalization as a
+    /// [`FailureCauseBackend::scope`] so the Hub can join an inventory row to
+    /// the cause an Accept would resolve against.
+    pub key: String,
+    pub present: bool,
+    pub monitored: bool,
+    pub sandbox: AiSandboxInventoryBackend,
+    pub amplifiers: AiAmplifiersInventoryBackend,
+    /// Critical process basenames attributed to this agent (empty when none).
+    /// Normalized as [`FailureSelectorKindBackend::CriticalProcess`] keys.
+    pub critical_processes: Vec<String>,
+    /// Secret-exposure labels attributed to this agent (empty when none).
+    /// Normalized as [`FailureSelectorKindBackend::SecretLabel`] keys.
+    pub secret_exposure_labels: Vec<String>,
+    /// All declared MCP endpoints for this agent (not only HIGH/CRITICAL).
+    pub mcp_servers: Vec<AiMcpServerInventoryBackend>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct AiSandboxInventoryBackend {
+    /// `None` when sandbox state was not assessed for this agent.
+    pub sandboxed: Option<bool>,
+    pub mechanism: String,
+    pub file_access_scope: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct AiAmplifiersInventoryBackend {
+    pub unsandboxed: bool,
+    pub passwordless_root: bool,
+    pub critical_subprocess: bool,
+    pub secret_exposure: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct AiMcpServerInventoryBackend {
+    /// Normalized as a [`FailureSelectorKindBackend::McpServer`] key.
+    pub server_name: String,
+    pub transport: String,
+    pub exposure_scope: String,
+    pub auth_strength: String,
+    pub is_edamame_server: bool,
+    /// Highest severity among visibility findings for this endpoint; empty
+    /// when none.
+    pub max_severity: String,
+    /// True when any finding is HIGH/CRITICAL (alertable gate).
+    pub alertable: bool,
+    /// Rule identifiers behind this endpoint's findings, normalized as
+    /// [`FailureSelectorKindBackend::McpRule`] keys so the Hub can offer a
+    /// per-rule Accept instead of only a whole-server one.
+    pub rule_ids: Vec<String>,
 }
 
 #[cfg(test)]
@@ -424,28 +530,78 @@ mod tests {
         )]
     }
 
+    fn sample_inventory() -> AiInventoryBackend {
+        AiInventoryBackend {
+            host: AiHostInventoryBackend {
+                assessed: true,
+                passwordless_root: true,
+                admin_user: false,
+                elevated_session: false,
+                user: "alice".to_string(),
+                platform: "macos".to_string(),
+            },
+            harnesses: vec![AiHarnessInventoryBackend {
+                slug: "nono".to_string(),
+                display_name: "nono".to_string(),
+                detected: true,
+            }],
+            agents: vec![AiAgentInventoryBackend {
+                key: "cursor".to_string(),
+                present: true,
+                monitored: false,
+                sandbox: AiSandboxInventoryBackend {
+                    sandboxed: Some(false),
+                    mechanism: String::new(),
+                    file_access_scope: String::new(),
+                },
+                amplifiers: AiAmplifiersInventoryBackend {
+                    unsandboxed: true,
+                    passwordless_root: true,
+                    critical_subprocess: false,
+                    secret_exposure: false,
+                },
+                critical_processes: vec!["ssh".to_string()],
+                secret_exposure_labels: vec!["aws_credentials".to_string()],
+                mcp_servers: vec![AiMcpServerInventoryBackend {
+                    server_name: "filesystem".to_string(),
+                    transport: "stdio".to_string(),
+                    exposure_scope: "stdio".to_string(),
+                    auth_strength: "none".to_string(),
+                    is_edamame_server: false,
+                    max_severity: "low".to_string(),
+                    alertable: false,
+                    rule_ids: vec!["shell_exec".to_string()],
+                }],
+            }],
+            truncated: false,
+        }
+    }
+
     #[test]
     fn denied_bundle_cannot_carry_payload() {
         let bundle = DetailBackend::new(DetailDomainBackend::Ai, DetailModeBackend::Denied)
-            .with_payload(sample_coverage(), sample_checks());
+            .with_payload(sample_coverage(), sample_checks(), Some(sample_inventory()));
         assert!(!bundle.allows_detail());
         assert!(bundle.coverage.is_empty());
         assert!(bundle.checks.is_empty());
+        assert!(bundle.inventory.is_none());
     }
 
     #[test]
     fn forced_bundle_carries_payload() {
         let bundle = DetailBackend::new(DetailDomainBackend::Ai, DetailModeBackend::Forced)
-            .with_payload(sample_coverage(), sample_checks());
+            .with_payload(sample_coverage(), sample_checks(), Some(sample_inventory()));
         assert!(bundle.allows_detail());
         assert_eq!(bundle.coverage.len(), 1);
         assert_eq!(bundle.checks.len(), 1);
+        assert!(bundle.inventory.is_some());
+        assert_eq!(bundle.inventory.as_ref().unwrap().agents.len(), 1);
     }
 
     #[test]
     fn wire_shape_is_flat_strings() {
         let bundle = DetailBackend::new(DetailDomainBackend::Ai, DetailModeBackend::Enabled)
-            .with_payload(sample_coverage(), sample_checks());
+            .with_payload(sample_coverage(), sample_checks(), Some(sample_inventory()));
         let json = serde_json::to_value(&bundle).expect("serialize");
         assert_eq!(json["domain"], "ai");
         assert_eq!(json["mode"], "enabled");
@@ -453,6 +609,26 @@ mod tests {
         assert_eq!(json["coverage"][0]["key"], "cursor");
         assert_eq!(json["coverage"][0]["present"], true);
         assert_eq!(json["coverage"][0]["monitored"], false);
+        assert_eq!(json["inventory"]["host"]["passwordless_root"], true);
+        assert_eq!(json["inventory"]["harnesses"][0]["slug"], "nono");
+        assert_eq!(json["inventory"]["agents"][0]["key"], "cursor");
+        assert_eq!(
+            json["inventory"]["agents"][0]["mcp_servers"][0]["server_name"],
+            "filesystem"
+        );
+        assert_eq!(json["inventory"]["truncated"], false);
+        assert_eq!(
+            json["inventory"]["agents"][0]["critical_processes"][0],
+            "ssh"
+        );
+        assert_eq!(
+            json["inventory"]["agents"][0]["secret_exposure_labels"][0],
+            "aws_credentials"
+        );
+        assert_eq!(
+            json["inventory"]["agents"][0]["mcp_servers"][0]["rule_ids"][0],
+            "shell_exec"
+        );
         assert_eq!(json["checks"][0]["check"], "unsecured_cursor");
         assert_eq!(json["checks"][0]["truncated"], false);
         assert_eq!(json["checks"][0]["causes"][0]["scope"], "cursor");
@@ -468,11 +644,22 @@ mod tests {
     }
 
     #[test]
-    fn missing_payload_fields_deserialize_as_empty() {
-        let bundle: DetailBackend =
-            serde_json::from_str(r#"{"domain":"ai","mode":"denied"}"#).expect("deserialize");
-        assert!(bundle.coverage.is_empty());
-        assert!(bundle.checks.is_empty());
+    fn missing_payload_fields_fail_to_deserialize() {
+        // No shipped producer omits these, so a missing field is a bug, not an
+        // old client. Defaulting `checks` to empty would read as "nothing is
+        // failing" and silently derive a passing governance verdict.
+        let err = serde_json::from_str::<DetailBackend>(r#"{"domain":"ai","mode":"denied"}"#)
+            .expect_err("missing payload fields must not deserialize");
+        assert!(err.to_string().contains("coverage"), "{err}");
+    }
+
+    #[test]
+    fn denied_bundle_round_trips_with_explicit_empty_payload() {
+        let bundle = DetailBackend::new(DetailDomainBackend::Ai, DetailModeBackend::Denied);
+        let json = serde_json::to_string(&bundle).expect("serialize");
+        let parsed: DetailBackend = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed, bundle);
+        assert!(parsed.inventory.is_none());
     }
 
     #[test]
