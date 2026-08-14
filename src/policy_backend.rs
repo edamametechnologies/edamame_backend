@@ -46,5 +46,12 @@ pub enum ReasonBackend {
 
         // Security checks that were not respected
         failed_security_checks: Vec<String>,
+
+        // Security checks carrying the tag that did pass.
+        // The Hub owns its own deploy schedule, so responses predating the
+        // field must still deserialize instead of failing the whole policy
+        // payload; an absent list means "not reported", rendered as empty.
+        #[serde(default)]
+        passed_security_checks: Vec<String>,
     },
 }
