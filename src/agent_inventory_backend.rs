@@ -2,50 +2,25 @@ use blake3::Hasher;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-/// First-seen classification of an agent footprint, mirrored from the core's
-/// `AgentClassification`. Standing-state export only -- never an alert by
-/// itself (the alarm lives in-app / in the agentic notification channel).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum AgentInventoryClassificationBackend {
-    /// Operator tapped "yes, this is me" -- the agent type is acknowledged.
-    Acknowledged,
-    /// Present on the host but its host-side observer is off (blind spot).
-    Shadow,
-    /// First-seen, unacknowledged footprint (the first-seen tripwire).
-    New,
-}
-
-impl std::fmt::Display for AgentInventoryClassificationBackend {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Acknowledged => write!(f, "acknowledged"),
-            Self::Shadow => write!(f, "shadow"),
-            Self::New => write!(f, "new"),
-        }
-    }
-}
-
 /// One row of the operator agent inventory exported to the fleet backend.
 ///
 /// Pure metadata (counts + flags). It carries no transcript content, no file
 /// bodies, and no secrets (privacy invariant I5): only the per-agent footprint
-/// shape the fleet needs to spot shadow / first-seen agents across devices.
+/// shape the fleet needs to spot unobserved agents across devices.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentInventoryRowBackend {
     /// Stable agent type slug (e.g. "cursor", "claude_code", "openclaw").
     pub agent_type: String,
     /// Human-readable agent name.
     pub display_name: String,
-    /// First-seen classification.
-    pub classification: AgentInventoryClassificationBackend,
     /// EDAMAME plugin installed in the agent's MCP config.
     pub installed: bool,
+    /// The agent product itself has an on-disk footprint under the user's home.
+    pub installed_on_host: bool,
     /// Transcript root present on disk.
     pub discovered: bool,
     /// Host-side transcript observer enabled for this agent.
     pub observer_enabled: bool,
-    /// Operator acknowledged this agent type ("yes, this is me").
-    pub acknowledged: bool,
     /// Count of MCP endpoints declared by this agent.
     pub mcp_endpoint_count: u32,
     /// Count of components attributed to this agent.
@@ -55,15 +30,21 @@ pub struct AgentInventoryRowBackend {
 }
 
 impl AgentInventoryRowBackend {
+    /// The agent has an on-disk footprint but its transcript observer is off,
+    /// so the host is blind to it. Mirrors the `unsecured_<agent>` internal
+    /// threat and `AgentInventoryEntry::is_unobserved` on the core side.
+    pub fn is_unobserved(&self) -> bool {
+        (self.discovered || self.installed_on_host) && !self.observer_enabled
+    }
+
     pub fn uid(&self) -> String {
         let mut hasher = Hasher::new();
         hasher.update(self.agent_type.as_bytes());
-        hasher.update(self.classification.to_string().as_bytes());
         hasher.update(&[
             self.installed as u8,
+            self.installed_on_host as u8,
             self.discovered as u8,
             self.observer_enabled as u8,
-            self.acknowledged as u8,
         ]);
         hasher.update(self.mcp_endpoint_count.to_le_bytes().as_slice());
         hasher.update(self.component_count.to_le_bytes().as_slice());
@@ -77,11 +58,11 @@ impl AgentInventoryRowBackend {
 /// This is the standing-state counterpart to the event-shaped
 /// `AgenticNotificationBackend`: rather than reporting a single moment-in-time
 /// alert, it reports the current inventory so the fleet can answer "which
-/// agents exist on which devices, and which are unacknowledged / unobserved".
+/// agents exist on which devices, and which of them are running unobserved".
 /// It mirrors the device-identity header of `AgenticNotificationBackend` so the
 /// backend can key it to the same device, and is pushed on each structural
-/// visibility refresh and on operator acknowledge / unacknowledge (deduped by
-/// `uid()` so a steady-state refresh does not re-send unchanged inventory).
+/// visibility refresh (deduped by `uid()` so a steady-state refresh does not
+/// re-send unchanged inventory).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentInventoryBackend {
     /// UTC timestamp when the snapshot was taken.
@@ -100,14 +81,10 @@ pub struct AgentInventoryBackend {
     pub os_version: String,
 
     // -- Rollup counts --------------------------------------------------
-    /// Total inventory rows (agents with any footprint or acknowledged).
+    /// Total inventory rows (agents with any footprint).
     pub agent_count: u32,
-    /// Rows classified `acknowledged`.
-    pub acknowledged_count: u32,
-    /// Rows classified `shadow` (present but unobserved).
-    pub shadow_count: u32,
-    /// Rows classified `new` (first-seen, unacknowledged).
-    pub new_count: u32,
+    /// Rows with an on-disk footprint whose observer is off (blind spots).
+    pub unobserved_count: u32,
     /// Total high-or-critical visibility findings across all agents.
     pub alertable_finding_count: u32,
 
