@@ -1,5 +1,4 @@
 pub mod advisor_todos_backend;
-pub mod agent_inventory_backend;
 pub mod agentic_backend;
 pub mod agentic_dismissal_report_backend;
 pub mod ai_whitelist_backend;
