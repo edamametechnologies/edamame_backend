@@ -28,6 +28,19 @@ pub const MAX_INVENTORY_CRITICAL_PROCESSES_PER_AGENT: usize = 32;
 pub const MAX_INVENTORY_SECRET_LABELS_PER_AGENT: usize = 32;
 pub const MAX_INVENTORY_RULE_IDS_PER_SERVER: usize = 16;
 
+/// Hard caps on the rich display-only context attached to a check.
+///
+/// Unlike [`MAX_FAILURE_CAUSES`], hitting these is cosmetic in exactly the way
+/// [`AiInventoryBackend::truncated`] is: context is never whitelist-matched, so
+/// a dropped row can never make an uncovered cause look covered, and must never
+/// change a derived governance verdict.
+pub const MAX_CHECK_CONTEXT_ROWS: usize = 24;
+pub const MAX_CONTEXT_FACTS: usize = 16;
+/// Ceiling on any single free-text context string (title, summary, fact value).
+/// Bounds report size and caps the blast radius of an unexpectedly long
+/// deterministic description.
+pub const MAX_CONTEXT_TEXT_LEN: usize = 512;
+
 /// Data class one [`DetailBackend`] bundle covers.
 ///
 /// Typed at emit time, carried as a plain string on the wire: an unknown enum
@@ -105,6 +118,31 @@ pub enum FailureSelectorKindBackend {
     SecretLabel,
     /// Host-side transcript observer state for the scoped agent (`paused`).
     Observer,
+    /// Detector family behind an attack finding (`credential_harvest`,
+    /// `token_exfiltration`, ...).
+    AttackFamily,
+    /// Stable `finding_key` of one attack finding -- the narrowest possible
+    /// acceptance.
+    AttackFinding,
+    /// Normalized basename of the process an attack finding is attributed to.
+    AttackProcess,
+    /// Destination an attack finding egressed to (domain, else IP).
+    AttackDestination,
+    /// Category of one divergence evidence row (`correlation:unexplained`, ...).
+    DivergenceCategory,
+    /// Stable `finding_key` of one divergence evidence row.
+    DivergenceFinding,
+    /// Normalized basename of the process a divergence row is attributed to.
+    DivergenceProcess,
+    /// Class of an escalated advisor action awaiting review.
+    EscalatedAction,
+    /// The runtime engine behind a check is not running (`stopped`).
+    ///
+    /// Its own kind because "the detector found something" and "the detector is
+    /// switched off" are different operational states that the raw boolean
+    /// collapses together. Without it a stopped engine would emit a cause-less
+    /// Active check, which the Hub could derive `Passed` for vacuously.
+    EngineState,
 }
 
 impl FailureSelectorKindBackend {
@@ -117,6 +155,15 @@ impl FailureSelectorKindBackend {
             Self::HarnessState => "harness_state",
             Self::SecretLabel => "secret_label",
             Self::Observer => "observer",
+            Self::AttackFamily => "attack_family",
+            Self::AttackFinding => "attack_finding",
+            Self::AttackProcess => "attack_process",
+            Self::AttackDestination => "attack_destination",
+            Self::DivergenceCategory => "divergence_category",
+            Self::DivergenceFinding => "divergence_finding",
+            Self::DivergenceProcess => "divergence_process",
+            Self::EscalatedAction => "escalated_action",
+            Self::EngineState => "engine_state",
         }
     }
 }
@@ -196,14 +243,146 @@ impl FailureCauseBackend {
 pub enum CheckContextKindBackend {
     /// Governance harness detected on the host (`nono`, `srt`, …).
     Harness,
+    /// One attack finding, carrying the card an operator already sees on the
+    /// device. `key` is the finding_key.
+    AttackFinding,
+    /// One divergence evidence row. `key` is the finding_key.
+    DivergenceFinding,
+    /// One escalated advisor action awaiting review. `key` is the action id.
+    EscalatedAction,
 }
 
 impl CheckContextKindBackend {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Harness => "harness",
+            Self::AttackFinding => "attack_finding",
+            Self::DivergenceFinding => "divergence_finding",
+            Self::EscalatedAction => "escalated_action",
         }
     }
+}
+
+/// One `label: value` row of a [`ContextDetailBackend`], mirroring a row of the
+/// on-device finding card.
+///
+/// Values are metadata only -- process basenames, destinations, detection-basis
+/// tokens, severities, counts. Never file content, environment values, secret
+/// material, or transcript bodies. See the consent ceiling in
+/// `edamame_core/AIGOVERNANCE.md` §4.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ContextFactBackend {
+    pub label: String,
+    pub value: String,
+}
+
+impl ContextFactBackend {
+    pub fn new(label: impl Into<String>, value: impl Into<String>) -> Self {
+        Self {
+            label: truncate_context_text(label.into()),
+            value: truncate_context_text(value.into()),
+        }
+    }
+}
+
+/// The third level of check detail: what the operator already sees on the
+/// device when an attack or divergence finding is raised.
+///
+/// The first two levels answer governance questions -- `causes` is what an
+/// administrator may accept, `context` (kind/key) is what explains the failure
+/// without being acceptable. Neither carries enough for a reviewer to actually
+/// *judge* a runtime finding: "attack_family:credential_harvest on cursor" says
+/// what fired, not what happened. This level carries that, so a Hub reviewer
+/// reaches the same decision the device user would from the same evidence.
+///
+/// Display-only, exactly like the row that owns it: never whitelist-matched,
+/// and truncating it must never change a derived verdict.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct ContextDetailBackend {
+    /// Card headline. Uses the "attack" vocabulary, not the internal
+    /// "vulnerability" type names.
+    pub title: String,
+    /// `critical` / `high` / `medium` / `low`, lowercased at emit time.
+    pub severity: String,
+    /// The deterministic description shown in the card body. Never an LLM
+    /// rationale: that is generated prose over telemetry and is the highest
+    /// disclosure risk in the finding.
+    pub summary: String,
+    /// What the finding is about -- process basename, or agent slug for
+    /// divergence. May be empty when host-global.
+    pub subject: String,
+    /// Card rows, capped at [`MAX_CONTEXT_FACTS`].
+    pub facts: Vec<ContextFactBackend>,
+    /// Framework tokens already carried by the finding (OWASP / ATLAS / rule
+    /// reference). Display-only.
+    pub references: Vec<String>,
+    /// The finding is currently dismissed on the device. Dismissed findings
+    /// still ship so the Hub can show that a condition was reviewed locally
+    /// rather than silently absent.
+    pub dismissed: bool,
+}
+
+impl ContextDetailBackend {
+    pub fn new(
+        title: impl Into<String>,
+        severity: impl Into<String>,
+        summary: impl Into<String>,
+    ) -> Self {
+        Self {
+            title: truncate_context_text(title.into()),
+            severity: severity.into().trim().to_ascii_lowercase(),
+            summary: truncate_context_text(summary.into()),
+            subject: String::new(),
+            facts: Vec::new(),
+            references: Vec::new(),
+            dismissed: false,
+        }
+    }
+
+    pub fn with_subject(mut self, subject: impl Into<String>) -> Self {
+        self.subject = truncate_context_text(subject.into());
+        self
+    }
+
+    /// Attach card rows. Empty labels or values are dropped, and the list is
+    /// capped at [`MAX_CONTEXT_FACTS`].
+    pub fn with_facts(mut self, facts: Vec<ContextFactBackend>) -> Self {
+        self.facts = facts
+            .into_iter()
+            .filter(|f| !f.label.is_empty() && !f.value.is_empty())
+            .take(MAX_CONTEXT_FACTS)
+            .collect();
+        self
+    }
+
+    pub fn with_references(mut self, references: Vec<String>) -> Self {
+        self.references = references
+            .into_iter()
+            .map(truncate_context_text)
+            .filter(|r| !r.is_empty())
+            .take(MAX_CONTEXT_FACTS)
+            .collect();
+        self
+    }
+
+    pub fn with_dismissed(mut self, dismissed: bool) -> Self {
+        self.dismissed = dismissed;
+        self
+    }
+}
+
+/// Clamp one context string to [`MAX_CONTEXT_TEXT_LEN`], on a char boundary so
+/// the result is always valid UTF-8.
+pub fn truncate_context_text(raw: String) -> String {
+    let trimmed = raw.trim();
+    if trimmed.len() <= MAX_CONTEXT_TEXT_LEN {
+        return trimmed.to_string();
+    }
+    let mut end = MAX_CONTEXT_TEXT_LEN;
+    while end > 0 && !trimmed.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}…", &trimmed[..end])
 }
 
 /// Display-only fact that helps an operator read a finding but is **never**
@@ -220,6 +399,17 @@ pub struct CheckContextBackend {
     pub key: String,
     /// Optional subject. Empty when host-global.
     pub scope: String,
+    /// The rich card behind this row, when the kind has one. `None` for a bare
+    /// diagnostic like `harness:nono`.
+    ///
+    /// `#[serde(default)]` -- the one place in this module where it is correct.
+    /// This surface HAS shipped (Hub `report_score` already ingests `details`
+    /// and parses it as [`DetailBackend`]), and clients roll out over weeks. A
+    /// required field here would make every pre-upgrade client's whole bundle
+    /// fail deserialization on the Hub and silently blank its AI governance
+    /// view. Same rollout-skew reason as `AiWhitelistBackend::enforced_kinds`.
+    #[serde(default)]
+    pub detail: Option<ContextDetailBackend>,
 }
 
 impl CheckContextBackend {
@@ -228,11 +418,17 @@ impl CheckContextBackend {
             kind: kind.as_str().to_string(),
             key: key.into(),
             scope: String::new(),
+            detail: None,
         }
     }
 
     pub fn with_scope(mut self, scope: impl Into<String>) -> Self {
         self.scope = scope.into();
+        self
+    }
+
+    pub fn with_detail(mut self, detail: ContextDetailBackend) -> Self {
+        self.detail = Some(detail);
         self
     }
 
