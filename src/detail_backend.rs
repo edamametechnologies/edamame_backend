@@ -446,6 +446,14 @@ impl CheckContextBackend {
 pub struct CheckDetailBackend {
     /// Metric name of the failing check (`agents_with_blast_radius`, …).
     pub check: String,
+    /// Framework reference tokens for the CHECK as a whole -- the static
+    /// crosswalk of what this check evidences (`OWASP-ASI05`, `OWASP-LLM06`,
+    /// `AML.T0053`, `TC-AID-01`, `ISO42001-A.4.5`, ...). Derived by the client
+    /// from the same catalogs its OWASP / ATLAS / Trust Controls scorecards use,
+    /// so the Hub can group live failing checks by framework without a mapping
+    /// table of its own. Metadata only: never consulted for severity, alerting,
+    /// or acceptance. Per-finding references stay on the context rows.
+    pub references: Vec<String>,
     /// Independent reasons the check failed. Every one must be covered before
     /// the Hub may derive a passing governance status.
     pub causes: Vec<FailureCauseBackend>,
@@ -466,6 +474,7 @@ impl CheckDetailBackend {
     ) -> Self {
         Self {
             check: check.into(),
+            references: Vec::new(),
             causes,
             context,
             truncated,
@@ -473,6 +482,19 @@ impl CheckDetailBackend {
     }
 
     /// Nothing to report for this check.
+    /// Attach the check-level framework reference tokens (sorted, deduped).
+    pub fn with_references(mut self, references: Vec<String>) -> Self {
+        let mut references: Vec<String> = references
+            .into_iter()
+            .map(|r| r.trim().to_string())
+            .filter(|r| !r.is_empty())
+            .collect();
+        references.sort();
+        references.dedup();
+        self.references = references;
+        self
+    }
+
     pub fn is_empty(&self) -> bool {
         self.causes.is_empty() && self.context.is_empty()
     }
