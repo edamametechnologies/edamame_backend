@@ -453,6 +453,13 @@ pub struct CheckDetailBackend {
     /// so the Hub can group live failing checks by framework without a mapping
     /// table of its own. Metadata only: never consulted for severity, alerting,
     /// or acceptance. Per-finding references stay on the context rows.
+    ///
+    /// `#[serde(default)]`: this struct is deserialized SERVER-SIDE from device
+    /// reports, and clients older than the field (1.8.3 and earlier) send
+    /// bundles without it. Rejecting their whole `details` array would drop
+    /// AI evidence from every not-yet-upgraded device -- the same
+    /// older-version compatibility case as persisted on-disk structs.
+    #[serde(default)]
     pub references: Vec<String>,
     /// Independent reasons the check failed. Every one must be covered before
     /// the Hub may derive a passing governance status.
