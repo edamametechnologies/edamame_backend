@@ -320,6 +320,16 @@ pub struct ContextDetailBackend {
     /// still ship so the Hub can show that a condition was reviewed locally
     /// rather than silently absent.
     pub dismissed: bool,
+    /// How the finding was adjudicated before publication, lowercased:
+    /// `llm_confirmed`, `history_reused`, `deterministic_only`,
+    /// `llm_unavailable`, or empty when the report predates the field. A
+    /// Hub reviewer needs it to know whether a model looked at the evidence
+    /// or the deterministic layer published alone; it never changes a
+    /// verdict. `#[serde(default)]` for the same reason as `references`:
+    /// deserialized server-side from device reports, and clients older
+    /// than the field send none.
+    #[serde(default)]
+    pub adjudication: String,
 }
 
 impl ContextDetailBackend {
@@ -336,6 +346,7 @@ impl ContextDetailBackend {
             facts: Vec::new(),
             references: Vec::new(),
             dismissed: false,
+            adjudication: String::new(),
         }
     }
 
@@ -367,6 +378,12 @@ impl ContextDetailBackend {
 
     pub fn with_dismissed(mut self, dismissed: bool) -> Self {
         self.dismissed = dismissed;
+        self
+    }
+    /// Attach the adjudication token (see the field doc). Trimmed and
+    /// lowercased so the Hub can switch on it without normalising.
+    pub fn with_adjudication(mut self, adjudication: impl Into<String>) -> Self {
+        self.adjudication = truncate_context_text(adjudication.into().trim().to_ascii_lowercase());
         self
     }
 }
