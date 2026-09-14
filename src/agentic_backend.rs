@@ -275,6 +275,49 @@ pub struct AgenticNotificationBackend {
     pub failed_count: usize,
 }
 
+/// One entry of the per-device attack-pattern / divergence history kept by
+/// the Portal (`POST /api/agentic_history`).
+///
+/// Where `AgenticNotificationBackend` is sent only when the alert gate passes
+/// (alertable findings, content dedup, cooldown), a history event is sent on
+/// every change of the published state: the active finding set changed, the
+/// verdict changed, a finding was dismissed or restored, or the state cleared.
+/// The `notification` carries the same device identity, verdict, decision
+/// source and finding list the alert would, so the Portal can render both
+/// with one shape; `event` says why the entry exists and the key lists say
+/// what changed since the previous entry from this device and domain.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgenticHistoryEventBackend {
+    /// `findings_changed`, `verdict_changed`, `dismissed`, `undismissed`,
+    /// `cleared`.
+    pub event: String,
+    /// Finding keys that became active since the previous entry.
+    pub added_keys: Vec<String>,
+    /// Finding keys that stopped being active since the previous entry.
+    pub removed_keys: Vec<String>,
+    /// The published state at the time of the event. `source` is the domain
+    /// (`Vulnerability` / `Divergence`); `findings` is the full active set
+    /// (capped by the sender), not only the alertable subset.
+    pub notification: AgenticNotificationBackend,
+}
+
+impl AgenticHistoryEventBackend {
+    pub fn uid(&self) -> String {
+        let mut hasher = Hasher::new();
+        hasher.update(self.event.as_bytes());
+        for key in &self.added_keys {
+            hasher.update(b"+");
+            hasher.update(key.as_bytes());
+        }
+        for key in &self.removed_keys {
+            hasher.update(b"-");
+            hasher.update(key.as_bytes());
+        }
+        hasher.update(self.notification.uid().as_bytes());
+        hasher.finalize().to_hex().to_string()
+    }
+}
+
 impl AgenticNotificationBackend {
     pub fn uid(&self) -> String {
         let mut hasher = Hasher::new();
@@ -374,6 +417,28 @@ mod tests {
 
         n1.active_findings_count = 5;
         assert_ne!(n1.uid(), uid1, "changing findings count should change uid");
+    }
+
+    #[test]
+    fn test_history_event_uid_covers_event_and_keys() {
+        let notification = sample_notification();
+        let event = AgenticHistoryEventBackend {
+            event: "findings_changed".to_string(),
+            added_keys: vec!["k1".to_string()],
+            removed_keys: vec![],
+            notification: notification.clone(),
+        };
+        let same = event.clone();
+        assert_eq!(event.uid(), same.uid());
+        let mut other_event = event.clone();
+        other_event.event = "dismissed".to_string();
+        assert_ne!(event.uid(), other_event.uid());
+        let mut other_keys = event.clone();
+        other_keys.removed_keys.push("k2".to_string());
+        assert_ne!(event.uid(), other_keys.uid());
+        let json = serde_json::to_string(&event).unwrap();
+        let back: AgenticHistoryEventBackend = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.uid(), event.uid());
     }
 
     #[test]
