@@ -1,4 +1,61 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+
+/// What the adjudicator saw and said about a finding at the time it was last
+/// published -- the device's half of the row a dismissal becomes on the Portal:
+/// (features, model verdict, human verdict). Without it a dismissal is an
+/// audit entry; with it, it is a labelled training example for the
+/// adjudicator, joinable through `report_id` to the notification and history
+/// the Portal already holds for the same detector tick.
+///
+/// Snapshot semantics: the device fills this from the most recent report in
+/// its own vulnerability history (or the most recent divergence verdict)
+/// that still carries the finding. `None` when that history is gone --
+/// pruned, cleared, or produced by an earlier daemon instance -- so the
+/// Portal can tell "no evidence was available" from "the evidence was empty".
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AgenticDismissalAdjudicationBackend {
+    /// Detector report id (vulnerability) or verdict entry id (divergence)
+    /// that last carried the finding.
+    pub report_id: String,
+    /// When that report / verdict was produced.
+    pub report_timestamp: DateTime<Utc>,
+    /// How the publication was decided, lowercased: `llm_confirmed`,
+    /// `history_reused`, `deterministic_only`, `llm_unavailable`,
+    /// `llm_overruled_soft_signals`, `guardrail_forced_deterministic`, or
+    /// empty when the report recorded none.
+    pub decision_source: String,
+    /// Report-level verdict: `CLEAR` / `PARTIAL` / `FINDINGS` for a
+    /// vulnerability report, the cycle verdict (`CLEAN`, `DIVERGENCE`, ...)
+    /// for divergence. Empty when no model decision was recorded.
+    pub report_verdict: String,
+    /// The per-finding verdict the model asked for -- `KEEP`, `SUPPRESS` or
+    /// `DEMOTE` -- before the guardrail tier had its say. `None` when the
+    /// decision carried no per-finding verdicts (coarse decisions, the
+    /// deterministic path, divergence).
+    pub model_verdict: Option<String>,
+    /// The model's own words about this finding when it produced any (the
+    /// per-finding reasoning for vulnerability, the cycle reasoning for
+    /// divergence), character-capped by the device. `None` when there were
+    /// none.
+    pub model_reasoning: Option<String>,
+    /// Severity the deterministic detector graded before adjudication. A
+    /// `DEMOTE` rewrites the published severity to LOW, so the published one
+    /// is not the label a trainer wants.
+    pub detector_severity: String,
+    /// Guardrail tier the finding landed in, lowercased: `evidence_floor`,
+    /// `critical_no_corroboration`, `open`; empty for divergence.
+    pub adjudication_tier: String,
+    /// Deterministic detection basis tags the finding carried.
+    pub detection_basis: Vec<String>,
+    /// The structured evidence packet the adjudicator was shown, as JSON:
+    /// the `FindingEvidence` packet for a vulnerability finding, the evidence
+    /// entry for divergence. `None` when the finding predates the packet.
+    pub evidence: Option<serde_json::Value>,
+    /// The CRS evidence score attached to the finding, as JSON, when the
+    /// detector computed one.
+    pub evidence_score: Option<serde_json::Value>,
+}
 
 /// Operator-initiated report sent to the EDAMAME backend when a user
 /// dismisses a vulnerability or divergence finding and explicitly opts in
@@ -87,6 +144,17 @@ pub struct AgenticDismissalReportBackend {
     /// receiving Lambda can fingerprint which detector version produced the
     /// dismissed finding.
     pub core_version: String,
+
+    // -- What the adjudicator saw and said --
+    /// The finding's evidence packet and the model's verdict on it at the
+    /// time it was last published, so the Portal stores every dismissal as a
+    /// (features, model verdict, human verdict) row. `None` when the device
+    /// no longer holds the report that carried the finding.
+    /// `#[serde(default)]` for the same reason as
+    /// `ContextDetailBackend::adjudication`: deserialized server-side from
+    /// device reports, and clients older than the field send none.
+    #[serde(default)]
+    pub adjudication: Option<AgenticDismissalAdjudicationBackend>,
 }
 
 #[cfg(test)]
@@ -121,6 +189,29 @@ mod tests {
             os_name: "macOS".to_string(),
             os_version: "26.4.0".to_string(),
             core_version: "1.2.3".to_string(),
+            adjudication: Some(sample_adjudication()),
+        }
+    }
+
+    fn sample_adjudication() -> AgenticDismissalAdjudicationBackend {
+        AgenticDismissalAdjudicationBackend {
+            report_id: "vuln-report-42".to_string(),
+            report_timestamp: chrono::TimeZone::with_ymd_and_hms(&Utc, 2026, 9, 17, 10, 0, 0)
+                .unwrap(),
+            decision_source: "llm_confirmed".to_string(),
+            report_verdict: "FINDINGS".to_string(),
+            model_verdict: Some("KEEP".to_string()),
+            model_reasoning: Some(
+                "curl read ~/.ssh/id_ed25519 then posted to an unknown host".to_string(),
+            ),
+            detector_severity: "HIGH".to_string(),
+            adjudication_tier: "open".to_string(),
+            detection_basis: vec!["sensitive_file:ssh".to_string()],
+            evidence: Some(serde_json::json!({
+                "session_is_anomalous": true,
+                "credential_store_kind": "ssh",
+            })),
+            evidence_score: Some(serde_json::json!({ "total": 0.72 })),
         }
     }
 
@@ -156,6 +247,7 @@ mod tests {
         assert_eq!(parsed.os_name, report.os_name);
         assert_eq!(parsed.os_version, report.os_version);
         assert_eq!(parsed.core_version, report.core_version);
+        assert_eq!(parsed.adjudication, report.adjudication);
     }
 
     #[test]
@@ -194,6 +286,7 @@ mod tests {
             "os_name",
             "os_version",
             "core_version",
+            "adjudication",
         ];
         for key in expected_keys {
             assert!(
@@ -241,11 +334,13 @@ mod tests {
             os_name: String::new(),
             os_version: String::new(),
             core_version: String::new(),
+            adjudication: None,
         };
         let json = serde_json::to_string(&report).expect("serialize must succeed");
         let parsed: AgenticDismissalReportBackend =
             serde_json::from_str(&json).expect("deserialize must succeed");
         assert_eq!(parsed.scope, "finding");
+        assert!(parsed.adjudication.is_none());
         assert!(parsed.ttl_secs.is_none());
         assert!(parsed.destination_port.is_none());
         assert!(parsed.material_classes.is_empty());
@@ -268,5 +363,49 @@ mod tests {
             result.is_err(),
             "missing finding_key must fail deserialization (no #[serde(default)] allowed)"
         );
+    }
+
+    /// Clients older than the field send no `adjudication` key at all. The
+    /// Portal must keep accepting those reports (the mixed-fleet reason for
+    /// the one `#[serde(default)]` on this struct), reading the field as
+    /// `None` -- "no evidence was available" -- rather than rejecting the
+    /// report.
+    #[test]
+    fn test_report_without_adjudication_key_deserializes_as_none() {
+        let json = serde_json::to_value(sample()).expect("to_value");
+        let mut obj = json.as_object().unwrap().clone();
+        obj.remove("adjudication");
+        let old_client = serde_json::to_string(&obj).unwrap();
+        let parsed: AgenticDismissalReportBackend =
+            serde_json::from_str(&old_client).expect("older-client payload must still parse");
+        assert!(parsed.adjudication.is_none());
+    }
+
+    /// The nested adjudication snapshot is born complete: a device that sends
+    /// it sends every field, and a missing one is a bug, not a default.
+    #[test]
+    fn test_adjudication_snapshot_has_no_silent_defaults() {
+        let json = serde_json::to_value(sample_adjudication()).expect("to_value");
+        let mut obj = json.as_object().unwrap().clone();
+        obj.remove("detector_severity");
+        let bad = serde_json::to_string(&obj).unwrap();
+        let result: Result<AgenticDismissalAdjudicationBackend, _> = serde_json::from_str(&bad);
+        assert!(
+            result.is_err(),
+            "missing detector_severity must fail deserialization (no #[serde(default)] allowed)"
+        );
+    }
+
+    /// The evidence packet travels as opaque JSON and comes back byte-for-byte:
+    /// the Portal stores it for training, it never interprets it.
+    #[test]
+    fn test_adjudication_evidence_roundtrips_as_json_value() {
+        let snapshot = sample_adjudication();
+        let json = serde_json::to_string(&snapshot).expect("serialize");
+        let parsed: AgenticDismissalAdjudicationBackend =
+            serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed.evidence, snapshot.evidence);
+        assert_eq!(parsed.evidence_score, snapshot.evidence_score);
+        assert_eq!(parsed.report_timestamp, snapshot.report_timestamp);
     }
 }
