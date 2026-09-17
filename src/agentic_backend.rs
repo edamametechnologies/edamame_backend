@@ -384,6 +384,11 @@ mod tests {
                 destination_ip: Some("10.0.0.1".to_string()),
                 destination_port: Some(443),
                 dismissed: false,
+                verdict: Some("KEEP".to_string()),
+                reasoning: Some(
+                    "The model kept this finding: curl read a token and reached a blacklisted host."
+                        .to_string(),
+                ),
             }],
             actions: Vec::new(),
             auto_resolved_count: 0,
