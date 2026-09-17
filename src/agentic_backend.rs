@@ -156,6 +156,19 @@ pub struct AgenticNotificationFindingBackend {
     pub destination_port: Option<u16>,
     /// Whether the finding has been dismissed locally.
     pub dismissed: bool,
+    /// Adjudication verdict actually applied to this finding by the LLM
+    /// adjudicator, after guardrail enforcement: "KEEP" or "DEMOTE".
+    /// `None` when the report was published without per-finding
+    /// adjudication (deterministic mode, LLM unavailable, or an older
+    /// coarse `suppressed_checks` decision). A "DEMOTE" is the only way to
+    /// tell a finding the model quieted from one the detector graded LOW on
+    /// its own.
+    pub verdict: Option<String>,
+    /// Per-finding reasoning, identical to the text the device shows on the
+    /// finding's detail card: the detector diagnosis, what the finding was
+    /// detected from, how it was adjudicated, and the model's own words.
+    /// `None` when no reasoning was produced for this finding.
+    pub reasoning: Option<String>,
 }
 
 impl AgenticNotificationFindingBackend {
