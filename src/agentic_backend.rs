@@ -174,10 +174,18 @@ pub struct AgenticNotificationFindingBackend {
     /// (`policy:allowlist_growth`, `correlation:unexpected_egress`, ...).
     /// `reference` stays the human-facing taxonomy line; this is the stable
     /// identifier the device's own card groups and labels by.
+    ///
+    /// `#[serde(default)]` on this and the other non-`Option` additions for
+    /// the same reason as `AgenticDismissalReportBackend::adjudication`: the
+    /// Portal deserializes device notifications with this very crate, and
+    /// devices older than the field send none. `Option` fields already read
+    /// as `None` when absent.
+    #[serde(default)]
     pub check: String,
     /// What the finding was detected from: the attack detector's detection
     /// basis tokens (`file_monitor`, `temp_staging`, ...) or, on the divergence
     /// plane, the trigger reason. Empty when the source recorded none.
+    #[serde(default)]
     pub detection_basis: Vec<String>,
     /// Canonical subject path of the finding (the file written, the anchor for
     /// folder-context dismissals), when the check has one.
@@ -191,6 +199,7 @@ pub struct AgenticNotificationFindingBackend {
     /// Files the finding is about: the open files that corroborated an
     /// attack-pattern finding, or the unexpected sensitive paths behind a
     /// divergence evidence entry. Bounded by the device.
+    #[serde(default)]
     pub open_files: Vec<String>,
     /// Session the finding was attributed to, when it came from network
     /// telemetry.
@@ -444,6 +453,34 @@ mod tests {
             escalated_count: 0,
             failed_count: 0,
         }
+    }
+
+    /// The Portal deserializes device notifications with this crate. A device
+    /// older than the per-finding card fields (1.9.1 and before) sends none of
+    /// them, and its notification MUST still parse: `Option` fields read as
+    /// `None` on their own, the three non-`Option` additions carry an explicit
+    /// default. Dropping a fleet's notifications on a Portal deploy is the
+    /// failure this guards against.
+    #[test]
+    fn test_finding_from_a_device_older_than_the_card_fields_still_parses() {
+        let old_shape = serde_json::json!({
+            "finding_key": "k",
+            "severity": "HIGH",
+            "description": "d",
+            "reference": "r",
+            "process_name": null,
+            "destination_domain": null,
+            "destination_ip": null,
+            "destination_port": null,
+            "dismissed": false
+        });
+        let parsed: AgenticNotificationFindingBackend =
+            serde_json::from_value(old_shape).expect("pre-card finding must parse");
+        assert!(parsed.check.is_empty());
+        assert!(parsed.detection_basis.is_empty());
+        assert!(parsed.open_files.is_empty());
+        assert!(parsed.verdict.is_none() && parsed.reasoning.is_none());
+        assert!(parsed.first_detected.is_none());
     }
 
     #[test]
