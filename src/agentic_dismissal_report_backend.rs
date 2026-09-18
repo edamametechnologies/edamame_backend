@@ -155,6 +155,14 @@ pub struct AgenticDismissalReportBackend {
     /// device reports, and clients older than the field send none.
     #[serde(default)]
     pub adjudication: Option<AgenticDismissalAdjudicationBackend>,
+    /// The finding as the device last published it, in exactly the shape the
+    /// notification and history payloads carry (same builder on the device),
+    /// so the Portal's false-positive review shows the operator the card they
+    /// dismissed and a trainer joins the report to the history row by
+    /// `finding_key` without a second schema. `None` when local history no
+    /// longer carries the finding. `#[serde(default)]` as for `adjudication`.
+    #[serde(default)]
+    pub finding: Option<crate::agentic_backend::AgenticNotificationFindingBackend>,
 }
 
 #[cfg(test)]
@@ -190,6 +198,33 @@ mod tests {
             os_version: "26.4.0".to_string(),
             core_version: "1.2.3".to_string(),
             adjudication: Some(sample_adjudication()),
+            finding: Some(crate::agentic_backend::AgenticNotificationFindingBackend {
+                finding_key: "token_exfiltration|curl|evil.example.com:443".to_string(),
+                severity: "HIGH".to_string(),
+                description: "Anomalous outbound to evil.example.com".to_string(),
+                reference: "CVE-2025-30066".to_string(),
+                process_name: Some("curl".to_string()),
+                destination_domain: Some("evil.example.com".to_string()),
+                destination_ip: Some("10.0.0.1".to_string()),
+                destination_port: Some(443),
+                dismissed: true,
+                verdict: Some("KEEP".to_string()),
+                reasoning: Some(
+                    "kept: curl read a token and reached a blacklisted host".to_string(),
+                ),
+                check: "token_exfiltration".to_string(),
+                detection_basis: vec!["anomalous_session".to_string()],
+                subject_path: None,
+                process_path: Some("/usr/bin/curl".to_string()),
+                parent_process_name: Some("bash".to_string()),
+                parent_process_path: Some("/bin/bash".to_string()),
+                parent_script_path: None,
+                open_files: vec!["/Users/test/.aws/credentials".to_string()],
+                session_uid: Some("session-1".to_string()),
+                agent_type: None,
+                agent_instance_id: None,
+                first_detected: Some(Utc::now()),
+            }),
         }
     }
 
@@ -287,6 +322,7 @@ mod tests {
             "os_version",
             "core_version",
             "adjudication",
+            "finding",
         ];
         for key in expected_keys {
             assert!(
@@ -335,6 +371,7 @@ mod tests {
             os_version: String::new(),
             core_version: String::new(),
             adjudication: None,
+            finding: None,
         };
         let json = serde_json::to_string(&report).expect("serialize must succeed");
         let parsed: AgenticDismissalReportBackend =
