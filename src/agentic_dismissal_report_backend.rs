@@ -69,6 +69,17 @@ pub struct AgenticDismissalAdjudicationBackend {
 ///
 /// All free-form fields (`note`, `email`) are entered by the operator
 /// in the consent dialog and may be empty.
+///
+/// Shape note (2026-09-18): since `finding` carries the whole device card,
+/// the flat finding fields below (`finding_title`, `finding_severity`,
+/// `check_or_category`, the process lineage and the agent pair) duplicate
+/// it; the rule-matcher fields (`scope`, `severity_ceiling`, `ttl_secs`, the
+/// class lists, `destination_*`, `workspace_root`) are the part that is not
+/// a finding and would become a nested `AgenticDismissalRuleBackend`. Not
+/// done on its own because the Portal lambda and FP review read the flat
+/// fields and fielded devices keep sending them; the two-step plan is in
+/// `edamame_core/VULNERABILITYDETECTION.md` ("Factorization of the FP
+/// report"). Fold step one into the next change that touches this struct.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgenticDismissalReportBackend {
     // -- Identity / context --
