@@ -169,6 +169,42 @@ pub struct AgenticNotificationFindingBackend {
     /// detected from, how it was adjudicated, and the model's own words.
     /// `None` when no reasoning was produced for this finding.
     pub reasoning: Option<String>,
+    /// Detector check id on the attack-pattern plane (`file_system_tampering`,
+    /// `credential_harvest`, ...) or evidence category on the divergence plane
+    /// (`policy:allowlist_growth`, `correlation:unexpected_egress`, ...).
+    /// `reference` stays the human-facing taxonomy line; this is the stable
+    /// identifier the device's own card groups and labels by.
+    pub check: String,
+    /// What the finding was detected from: the attack detector's detection
+    /// basis tokens (`file_monitor`, `temp_staging`, ...) or, on the divergence
+    /// plane, the trigger reason. Empty when the source recorded none.
+    pub detection_basis: Vec<String>,
+    /// Canonical subject path of the finding (the file written, the anchor for
+    /// folder-context dismissals), when the check has one.
+    pub subject_path: Option<String>,
+    /// Path of the process behind `process_name`, when known.
+    pub process_path: Option<String>,
+    pub parent_process_name: Option<String>,
+    pub parent_process_path: Option<String>,
+    /// Script the parent process was running, when the lineage knew it.
+    pub parent_script_path: Option<String>,
+    /// Files the finding is about: the open files that corroborated an
+    /// attack-pattern finding, or the unexpected sensitive paths behind a
+    /// divergence evidence entry. Bounded by the device.
+    pub open_files: Vec<String>,
+    /// Session the finding was attributed to, when it came from network
+    /// telemetry.
+    pub session_uid: Option<String>,
+    /// Agent attribution when the device could pin the finding to an agent
+    /// slice (divergence evidence today): the agent type slug and the
+    /// per-run instance id.
+    pub agent_type: Option<String>,
+    pub agent_instance_id: Option<String>,
+    /// When the device first recorded this finding in its action history.
+    /// Carried-forward findings keep their original detection time here while
+    /// the notification `timestamp` moves with every tick. `None` when the
+    /// finding is not yet in history.
+    pub first_detected: Option<DateTime<Utc>>,
 }
 
 impl AgenticNotificationFindingBackend {
@@ -389,6 +425,18 @@ mod tests {
                     "The model kept this finding: curl read a token and reached a blacklisted host."
                         .to_string(),
                 ),
+                check: "token_exfiltration".to_string(),
+                detection_basis: vec!["anomalous_session".to_string(), "sensitive_file".to_string()],
+                subject_path: None,
+                process_path: Some("/usr/bin/curl".to_string()),
+                parent_process_name: Some("bash".to_string()),
+                parent_process_path: Some("/bin/bash".to_string()),
+                parent_script_path: Some("/tmp/run.sh".to_string()),
+                open_files: vec!["/Users/test/.aws/credentials".to_string()],
+                session_uid: Some("session-1".to_string()),
+                agent_type: None,
+                agent_instance_id: None,
+                first_detected: Some(Utc::now()),
             }],
             actions: Vec::new(),
             auto_resolved_count: 0,
