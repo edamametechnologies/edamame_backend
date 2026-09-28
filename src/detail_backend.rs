@@ -304,9 +304,13 @@ pub struct ContextDetailBackend {
     pub title: String,
     /// `critical` / `high` / `medium` / `low`, lowercased at emit time.
     pub severity: String,
-    /// The deterministic description shown in the card body. Never an LLM
-    /// rationale: that is generated prose over telemetry and is the highest
-    /// disclosure risk in the finding.
+    /// The card body. Since 2.0.2 composed by the client from the card's
+    /// minimized structured fields (process basenames, public destination or
+    /// its class, `label:basename` sensitive files, program names), not copied
+    /// from the detector's description, which embeds full paths, command lines
+    /// and session keys. Never an LLM rationale either: that is generated
+    /// prose over telemetry and is the highest disclosure risk in the finding.
+    /// Same field, same type -- only its content was minimized.
     pub summary: String,
     /// What the finding is about -- process basename, or agent slug for
     /// divergence. May be empty when host-global.
@@ -678,6 +682,10 @@ pub struct AiHostInventoryBackend {
     pub passwordless_root: bool,
     pub admin_user: bool,
     pub elevated_session: bool,
+    /// Always empty since 2.0.2: the assessed account name is personal data
+    /// the Hub has no use for (it identifies the device, not the account).
+    /// Kept, not removed, so a deployed Hub that requires the field keeps
+    /// parsing reports; older clients may still send a name.
     pub user: String,
     pub platform: String,
 }
