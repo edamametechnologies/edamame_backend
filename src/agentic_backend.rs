@@ -206,7 +206,11 @@ pub struct AgenticNotificationFindingBackend {
     pub session_uid: Option<String>,
     /// Agent attribution when the device could pin the finding to an agent
     /// slice (divergence evidence today): the agent type slug and the
-    /// per-run instance id.
+    /// instance id. From EDAMAME 2.0.3 the instance id is a per-process
+    /// pseudonym (`instance-<8 hex>` plus the `-observer` / `-pushed`
+    /// suffix) that changes when the device's core restarts; earlier
+    /// devices send the id itself, which carries the host name. Display
+    /// only: never a key.
     pub agent_type: Option<String>,
     pub agent_instance_id: Option<String>,
     /// When the device first recorded this finding in its action history.
@@ -279,7 +283,11 @@ pub struct AgenticNotificationBackend {
     pub timestamp: DateTime<Utc>,
 
     // -- Device identity ------------------------------------------------
-    /// Hostname of the reporting device.
+    /// Hostname of the reporting device. Empty from EDAMAME 2.0.3, which
+    /// sends no host name (the Portal knows the device by the id every
+    /// request carries), and whose titles and bodies no longer name the
+    /// device; its paths write a person's home as `~` and its texts mask the
+    /// secrets the device recognizes. `finding_key` values are unchanged.
     pub hostname: String,
     /// Primary IPv4 address.
     pub ip4: String,
