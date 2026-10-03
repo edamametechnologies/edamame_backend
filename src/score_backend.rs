@@ -1,6 +1,7 @@
 use crate::detail_backend::DetailBackend;
 use crate::helper_state_backend::HelperStateBackend;
 use crate::history_backend::OrderHistoryBackend;
+use crate::managed_configuration_backend::ManagedConfigurationStatusBackend;
 use crate::threat_backend::ThreatMetricsBackend;
 use serde::{Deserialize, Serialize};
 
@@ -70,4 +71,9 @@ pub struct DetailedScoreBackend {
     /// `#[serde(default)]`: older agents omit this field on the wire.
     #[serde(default)]
     pub details: Vec<DetailBackend>,
+    /// The answer to the domain's Hub-managed configuration (2.0.5); `None`
+    /// when the domain configures nothing for this device.
+    /// `#[serde(default)]`: older agents omit this field on the wire.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub managed_configuration: Option<ManagedConfigurationStatusBackend>,
 }

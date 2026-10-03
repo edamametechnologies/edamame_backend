@@ -11,6 +11,7 @@ pub mod lanscan_device_info_backend;
 pub mod lanscan_dislike_device_info_backend;
 pub mod lanscan_port_info_backend;
 pub mod lanscan_vulnerability_info_backend;
+pub mod managed_configuration_backend;
 pub mod order_backend;
 pub mod order_type_backend;
 pub mod policy_backend;
