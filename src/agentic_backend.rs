@@ -14,13 +14,27 @@ pub struct AgenticAnalysisRequestBackend {
     pub max_tokens: u32,
     /// Type of analysis to perform
     pub analysis_type: AdviceTypeBackend,
+    /// The same prompt with worked examples in it (attack-pattern
+    /// adjudication, 2.3.1). The Portal sends it to its model in place of
+    /// `prompt` only when that model is one the examples were measured
+    /// helping; any other model gets `prompt`.
+    /// `#[serde(default)]`: older agents omit this field on the wire.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_with_examples: Option<String>,
 }
 
 impl AgenticAnalysisRequestBackend {
+    /// The request's cache identity. A request carrying the examples variant
+    /// is a different request (a model given the examples may answer
+    /// otherwise); one without keeps the identity it always had.
     pub fn uid(&self) -> String {
         let mut hasher = Hasher::new();
         hasher.update(self.prompt.as_bytes());
         hasher.update(self.max_tokens.to_le_bytes().as_slice());
+        if let Some(with_examples) = &self.prompt_with_examples {
+            hasher.update(b"\0prompt_with_examples\0");
+            hasher.update(with_examples.as_bytes());
+        }
         hasher.finalize().to_hex().to_string()
     }
 }
@@ -406,6 +420,53 @@ impl AgenticNotificationBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A request from an agent older than `prompt_with_examples` (2.3.0 and
+    /// before) still parses, and a request without examples keeps the old
+    /// wire shape, so a Portal on the previous crate reads it unchanged.
+    #[test]
+    fn analysis_request_prompt_with_examples_is_optional_on_the_wire() {
+        let old_agent =
+            r#"{"prompt":"p","system_prompt":"","max_tokens":800,"analysis_type":"Threat"}"#;
+        let request: AgenticAnalysisRequestBackend = serde_json::from_str(old_agent).unwrap();
+        assert!(request.prompt_with_examples.is_none());
+
+        let encoded = serde_json::to_value(&request).unwrap();
+        assert!(encoded.get("prompt_with_examples").is_none());
+
+        let with_examples = AgenticAnalysisRequestBackend {
+            prompt_with_examples: Some("p and examples".to_string()),
+            ..request
+        };
+        let encoded = serde_json::to_string(&with_examples).unwrap();
+        let decoded: AgenticAnalysisRequestBackend = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(
+            decoded.prompt_with_examples.as_deref(),
+            Some("p and examples")
+        );
+    }
+
+    /// A request without examples keeps the cache identity it had before the
+    /// field existed; one with them is another request.
+    #[test]
+    fn analysis_request_uid_tells_the_examples_variant_apart() {
+        let plain = AgenticAnalysisRequestBackend {
+            prompt: "p".to_string(),
+            system_prompt: String::new(),
+            max_tokens: 800,
+            analysis_type: AdviceTypeBackend::Threat,
+            prompt_with_examples: None,
+        };
+        let with_examples = AgenticAnalysisRequestBackend {
+            prompt_with_examples: Some("p and examples".to_string()),
+            ..plain.clone()
+        };
+        let mut hasher = Hasher::new();
+        hasher.update(b"p");
+        hasher.update(800u32.to_le_bytes().as_slice());
+        assert_eq!(plain.uid(), hasher.finalize().to_hex().to_string());
+        assert_ne!(plain.uid(), with_examples.uid());
+    }
 
     fn sample_notification() -> AgenticNotificationBackend {
         AgenticNotificationBackend {
