@@ -10,7 +10,7 @@
 //! Today the only domain is `ai`. A future domain (FIM, capture, …) is an extra
 //! element in `DetailedScoreBackend.details`, not a new top-level field.
 //!
-//! See `edamame_core/AIGOVERNANCE.md`.
+//! See `edamame_core/docs/ai-security/12-ai-governance.md`.
 
 use serde::{Deserialize, Serialize};
 
@@ -269,7 +269,7 @@ impl CheckContextKindBackend {
 /// Values are metadata only -- process basenames, destinations, detection-basis
 /// tokens, severities, counts. Never file content, environment values, secret
 /// material, or transcript bodies. See the consent ceiling in
-/// `edamame_core/AIGOVERNANCE.md` §4.
+/// `edamame_core/docs/ai-security/12-ai-governance.md` §4.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ContextFactBackend {
     pub label: String,
@@ -555,7 +555,7 @@ impl CoverageKindBackend {
 /// subject regardless of check status, carry no failing detail, and are never
 /// whitelist-matched -- that is [`FailureCauseBackend`]'s job. They exist
 /// because a boolean check cannot separate "absent" from "present and
-/// healthy": both are Inactive. See `edamame_core/AIGOVERNANCE.md`.
+/// healthy": both are Inactive. See `edamame_core/docs/ai-security/12-ai-governance.md`.
 ///
 /// For `agent` rows, `present` means the transcript root is reachable and
 /// `monitored` means the host-side observer is active.

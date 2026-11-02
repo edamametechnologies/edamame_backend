@@ -78,7 +78,7 @@ pub struct AgenticDismissalAdjudicationBackend {
 /// a finding and would become a nested `AgenticDismissalRuleBackend`. Not
 /// done on its own because the Portal lambda and FP review read the flat
 /// fields and fielded devices keep sending them; the two-step plan is in
-/// `edamame_core/VULNERABILITYDETECTION.md` ("Factorization of the FP
+/// `edamame_core/docs/ai-security/07-attack-pattern-detector.md` ("Factorization of the FP
 /// report"). Fold step one into the next change that touches this struct.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgenticDismissalReportBackend {
