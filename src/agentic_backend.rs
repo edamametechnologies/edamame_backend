@@ -21,12 +21,69 @@ pub struct AgenticAnalysisRequestBackend {
     /// `#[serde(default)]`: older agents omit this field on the wire.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt_with_examples: Option<String>,
+    /// What the request adjudicates (2.3.2), so the Portal appends only the
+    /// operator-accepted false-positive shapes that concern it: an entry may
+    /// only ever quiet a finding of its own check, and the entries of other
+    /// checks made the model more cautious about everything else.
+    /// `#[serde(default)]`: older agents omit this field on the wire, and the
+    /// Portal then appends every accepted shape, as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub adjudication_scope: Option<AgenticAdjudicationScopeBackend>,
+}
+
+/// The findings an agentic analysis request adjudicates.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgenticAdjudicationScopeBackend {
+    /// `vulnerability` (attack-pattern findings), `divergence`, or `none`
+    /// for a request that adjudicates no finding (a behavioral model, an
+    /// advisor todo).
+    pub domain: String,
+    /// The detector checks (attack pattern) or evidence categories
+    /// (divergence) of the findings in the prompt, as a dismissal report
+    /// names them (`check_or_category`), sorted and without duplicates.
+    /// Empty for `none`.
+    pub checks: Vec<String>,
+}
+
+impl AgenticAdjudicationScopeBackend {
+    pub const VULNERABILITY: &'static str = "vulnerability";
+    pub const DIVERGENCE: &'static str = "divergence";
+    pub const NONE: &'static str = "none";
+
+    /// The scope of a request adjudicating findings of `domain` with these
+    /// checks: trimmed, empty ones dropped, sorted, without duplicates.
+    pub fn findings<I, S>(domain: &str, checks: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let mut checks: Vec<String> = checks
+            .into_iter()
+            .map(|check| check.as_ref().trim().to_string())
+            .filter(|check| !check.is_empty())
+            .collect();
+        checks.sort();
+        checks.dedup();
+        Self {
+            domain: domain.to_string(),
+            checks,
+        }
+    }
+
+    /// The scope of a request that adjudicates no finding.
+    pub fn no_findings() -> Self {
+        Self {
+            domain: Self::NONE.to_string(),
+            checks: Vec::new(),
+        }
+    }
 }
 
 impl AgenticAnalysisRequestBackend {
     /// The request's cache identity. A request carrying the examples variant
-    /// is a different request (a model given the examples may answer
-    /// otherwise); one without keeps the identity it always had.
+    /// or a scope is a different request (a model given the examples, or
+    /// other accepted shapes, may answer otherwise); one without keeps the
+    /// identity it always had.
     pub fn uid(&self) -> String {
         let mut hasher = Hasher::new();
         hasher.update(self.prompt.as_bytes());
@@ -34,6 +91,14 @@ impl AgenticAnalysisRequestBackend {
         if let Some(with_examples) = &self.prompt_with_examples {
             hasher.update(b"\0prompt_with_examples\0");
             hasher.update(with_examples.as_bytes());
+        }
+        if let Some(scope) = &self.adjudication_scope {
+            hasher.update(b"\0adjudication_scope\0");
+            hasher.update(scope.domain.as_bytes());
+            for check in &scope.checks {
+                hasher.update(b"\0");
+                hasher.update(check.as_bytes());
+            }
         }
         hasher.finalize().to_hex().to_string()
     }
@@ -456,6 +521,7 @@ mod tests {
             max_tokens: 800,
             analysis_type: AdviceTypeBackend::Threat,
             prompt_with_examples: None,
+            adjudication_scope: None,
         };
         let with_examples = AgenticAnalysisRequestBackend {
             prompt_with_examples: Some("p and examples".to_string()),
@@ -466,6 +532,52 @@ mod tests {
         hasher.update(800u32.to_le_bytes().as_slice());
         assert_eq!(plain.uid(), hasher.finalize().to_hex().to_string());
         assert_ne!(plain.uid(), with_examples.uid());
+    }
+
+    /// A request from an agent older than `adjudication_scope` (2.3.1 and
+    /// before) still parses, and one without a scope keeps the wire shape and
+    /// the cache identity it had; a scope makes it another request.
+    #[test]
+    fn analysis_request_adjudication_scope_is_optional_on_the_wire() {
+        let old_agent =
+            r#"{"prompt":"p","system_prompt":"","max_tokens":800,"analysis_type":"Threat"}"#;
+        let plain: AgenticAnalysisRequestBackend = serde_json::from_str(old_agent).unwrap();
+        assert!(plain.adjudication_scope.is_none());
+        let encoded = serde_json::to_value(&plain).unwrap();
+        assert!(encoded.get("adjudication_scope").is_none());
+
+        let scoped = AgenticAnalysisRequestBackend {
+            adjudication_scope: Some(AgenticAdjudicationScopeBackend::findings(
+                AgenticAdjudicationScopeBackend::VULNERABILITY,
+                [
+                    "token_exfiltration",
+                    " credential_harvest ",
+                    "",
+                    "token_exfiltration",
+                ],
+            )),
+            ..plain.clone()
+        };
+        let encoded = serde_json::to_string(&scoped).unwrap();
+        let decoded: AgenticAnalysisRequestBackend = serde_json::from_str(&encoded).unwrap();
+        let scope = decoded.adjudication_scope.expect("scope on the wire");
+        assert_eq!(scope.domain, "vulnerability");
+        assert_eq!(
+            scope.checks,
+            vec!["credential_harvest", "token_exfiltration"]
+        );
+
+        let mut hasher = Hasher::new();
+        hasher.update(b"p");
+        hasher.update(800u32.to_le_bytes().as_slice());
+        assert_eq!(plain.uid(), hasher.finalize().to_hex().to_string());
+        assert_ne!(plain.uid(), scoped.uid());
+        let none = AgenticAnalysisRequestBackend {
+            adjudication_scope: Some(AgenticAdjudicationScopeBackend::no_findings()),
+            ..plain.clone()
+        };
+        assert_ne!(none.uid(), scoped.uid());
+        assert_ne!(none.uid(), plain.uid());
     }
 
     fn sample_notification() -> AgenticNotificationBackend {
